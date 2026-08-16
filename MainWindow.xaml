@@ -365,7 +365,7 @@
                                 <Button Content="랜덤 배정" Style="{StaticResource ActionBarBtn}" Margin="0,0,8,0" Click="BtnRandomAllocation_Click"/>
                                 <Button x:Name="BtnSeatFixMode" Content="좌석 고정 모드" Style="{StaticResource ActionBarBtn}" Margin="0,0,8,0" Click="BtnSeatFixMode_Click"/>
                                 <Button x:Name="BtnSeatDeleteMode" Content="좌석 데이터 삭제" Style="{StaticResource ActionBarBtn}" Margin="0,0,8,0" Click="BtnSeatDeleteMode_Click"/>
-                                <Button x:Name="BtnImportDashboardExcel" Content="📥 엑셀 가져오기" Style="{StaticResource ActionBarBtn}" Click="BtnImportDashboardExcel_Click"/>
+                                <Button x:Name="BtnImportDashboardExcel" Content="📤 엑셀 내보내기" Style="{StaticResource ActionBarBtn}" Click="BtnImportDashboardExcel_Click"/>
                                 <Button x:Name="BtnDeleteSelected" Content="선택된 좌석 삭제" Background="#EF4444" Foreground="White" BorderThickness="0" Padding="15,8" FontWeight="Bold" Margin="8,0,0,0" Visibility="Collapsed" Click="BtnDeleteSelected_Click">
                                     <Button.Resources>
                                         <Style TargetType="Border">
@@ -897,25 +897,15 @@
                                 </StackPanel>
                             </Border>
 
-                            <!-- Action Buttons and Semester Selector -->
-                            <StackPanel Grid.Column="2" Orientation="Vertical" VerticalAlignment="Center" HorizontalAlignment="Right">
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                    <TextBlock Text="🔍 검색: " VerticalAlignment="Center" Margin="10,0,5,0" Foreground="#374151" FontSize="12" FontWeight="SemiBold"/>
-                                    <TextBox x:Name="TxtSearchCabinet" Width="120" Padding="5" VerticalAlignment="Center" Margin="0,0,10,0" KeyUp="TxtSearchCabinet_KeyUp"/>
-                                    <Button x:Name="BtnShowApprovalHistory" Content="📋 승인/반려 내역" Style="{StaticResource ActionBarBtn}" Margin="0,0,8,0" Tag="캐비닛" Click="BtnShowApprovalHistory_Click"/>
-                                    <Button x:Name="BtnCabinetDelete" Content="캐비닛 데이터 삭제" Style="{StaticResource ActionBarBtn}" Margin="0,0,8,0" Click="BtnCabinetDelete_Click"/>
-                                    <Button x:Name="BtnCabinetFix" Content="캐비닛 데이터 고정" Style="{StaticResource ActionBarBtn}" Margin="0,0,8,0" Click="BtnCabinetFix_Click"/>
-                                    <Button x:Name="BtnCabinetExport" Content="캐비닛 데이터 추출" Style="{StaticResource ActionBarBtn}" Margin="0,0,8,0" Click="BtnCabinetExport_Click"/>
-                                    <Button x:Name="BtnImportCabinetExcel" Content="📥 엑셀 가져오기" Style="{StaticResource ActionBarBtn}" Click="BtnImportCabinetExcel_Click"/>
-                                </StackPanel>
-                            
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                                    <TextBlock Text="📅 대여 학기 설정: " VerticalAlignment="Center" Margin="0,0,8,0" Foreground="#374151" FontSize="12" FontWeight="SemiBold"/>
-                                    <RadioButton x:Name="RadioSemester1" Content="1학기" Style="{StaticResource SemesterRadioBtn}" IsChecked="True" Checked="RadioSemester_Checked" Margin="0,0,6,0"/>
-                                    <RadioButton x:Name="RadioSemesterSummer" Content="여름방학" Style="{StaticResource SemesterRadioBtn}" Checked="RadioSemester_Checked" Margin="0,0,6,0"/>
-                                    <RadioButton x:Name="RadioSemester2" Content="2학기" Style="{StaticResource SemesterRadioBtn}" Checked="RadioSemester_Checked" Margin="0,0,6,0"/>
-                                    <RadioButton x:Name="RadioSemesterWinter" Content="겨울방학" Style="{StaticResource SemesterRadioBtn}" Checked="RadioSemester_Checked"/>
-                                </StackPanel>
+                            <!-- Action Buttons -->
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right">
+                                <TextBlock Text="🔍 검색: " VerticalAlignment="Center" Margin="10,0,5,0" Foreground="#374151" FontSize="12" FontWeight="SemiBold"/>
+                                <TextBox x:Name="TxtSearchCabinet" Width="120" Padding="5" VerticalAlignment="Center" Margin="0,0,10,0" KeyUp="TxtSearchCabinet_KeyUp"/>
+                                <Button x:Name="BtnShowApprovalHistory" Content="📋 승인/반려 내역" Style="{StaticResource ActionBarBtn}" Margin="0,0,8,0" Tag="캐비닛" Click="BtnShowApprovalHistory_Click"/>
+                                <Button x:Name="BtnCabinetDelete" Content="캐비닛 데이터 삭제" Style="{StaticResource ActionBarBtn}" Margin="0,0,8,0" Click="BtnCabinetDelete_Click"/>
+                                <Button x:Name="BtnCabinetFix" Content="캐비닛 데이터 고정" Style="{StaticResource ActionBarBtn}" Margin="0,0,8,0" Click="BtnCabinetFix_Click"/>
+                                <Button x:Name="BtnCabinetExport" Content="캐비닛 데이터 추출" Style="{StaticResource ActionBarBtn}" Margin="0,0,8,0" Click="BtnCabinetExport_Click"/>
+                                <Button x:Name="BtnImportCabinetExcel" Content="📥 엑셀 가져오기" Style="{StaticResource ActionBarBtn}" Click="BtnImportCabinetExcel_Click"/>
                             </StackPanel>
                         </Grid>
 

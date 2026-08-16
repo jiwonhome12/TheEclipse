@@ -261,7 +261,7 @@
                                 <Button Content="랜덤 배정" Style="{StaticResource ActionBarBtn}" Margin="0,0,8,0" Click="BtnRandomAllocation_Click"/>
                                 <Button x:Name="BtnSeatFixMode" Content="좌석 고정 모드" Style="{StaticResource ActionBarBtn}" Margin="0,0,8,0" Click="BtnSeatFixMode_Click"/>
                                 <Button x:Name="BtnSeatDeleteMode" Content="좌석 데이터 삭제" Style="{StaticResource ActionBarBtn}" Margin="0,0,8,0" Click="BtnSeatDeleteMode_Click"/>
-                                <Button x:Name="BtnImportDashboardExcel" Content="📥 엑셀 가져오기" Style="{StaticResource ActionBarBtn}" Click="BtnImportDashboardExcel_Click"/>
+                                <Button x:Name="BtnImportDashboardExcel" Content="📤 엑셀 내보내기" Style="{StaticResource ActionBarBtn}" Click="BtnImportDashboardExcel_Click"/>
                                 <Button x:Name="BtnDeleteSelected" Content="선택된 좌석 삭제" Background="#EF4444" Foreground="White" BorderThickness="0" Padding="15,8" FontWeight="Bold" Margin="8,0,0,0" Visibility="Collapsed" Click="BtnDeleteSelected_Click">
                                     <Button.Resources>
                                         <Style TargetType="Border">

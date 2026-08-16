@@ -1278,8 +1278,8 @@ namespace SeatManagerApp
                 _approvals.Remove(req);
                 _approvalHistory.Add(req);
 
-                // If SangsangLab or Cabinet request, assign student to dashboard if they are approved
-                if (req.TabType == "상상Lab" || req.TabType == "캐비닛")
+                // If SangsangLab request, assign student to dashboard if they are approved
+                if (req.TabType == "상상Lab")
                 {
                     // Check duplicate seat assignment and remove from old seat
                     var duplicateSeat = _activeSeats.FirstOrDefault(s => s.Student != null && s.Student.StudentId == masterStudent.StudentId);
@@ -2458,68 +2458,46 @@ namespace SeatManagerApp
 
         private void BtnImportDashboardExcel_Click(object sender, RoutedEventArgs e)
         {
-            var dialog = new Microsoft.Win32.OpenFileDialog
+            var occupiedSeats = _activeSeats.Where(s => s.Student != null).OrderBy(s => s.SeatNumber).ToList();
+            if (occupiedSeats.Count == 0)
             {
-                Filter = "Excel Files (*.xlsx)|*.xlsx|All Files (*.*)|*.*",
-                Title = "대시보드 좌석 배치 엑셀 가져오기"
+                MessageBox.Show("대시보드에 착석한 학생 정보가 없습니다.", "알림", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var dialog = new Microsoft.Win32.SaveFileDialog
+            {
+                Filter = "Excel Files (*.xlsx)|*.xlsx",
+                Title = "대시보드 학생 정보 엑셀 내보내기",
+                FileName = $"대시보드_학생현황_{_currentSimulatedDate:yyyyMMdd}.xlsx"
             };
+
             if (dialog.ShowDialog() == true)
             {
                 try
                 {
-                    var rows = MiniExcelLibs.MiniExcel.Query(dialog.FileName).ToList();
-                    int importedCount = 0;
-                    foreach (IDictionary<string, object> row in rows)
+                    var exportData = new List<Dictionary<string, object>>();
+                    foreach (var seat in occupiedSeats)
                     {
-                        var values = row.Values.ToList();
-                        if (values.Count < 2) continue;
-
-                        string col0 = values[0]?.ToString() ?? "";
-                        if (col0 == "SeatNumber" || col0 == "좌석번호" || string.IsNullOrWhiteSpace(col0)) continue;
-
-                        int.TryParse(col0, out int seatNum);
-                        if (seatNum <= 0) continue;
-
-                        string id = values.Count > 1 ? (values[1]?.ToString() ?? "") : "";
-                        string name = values.Count > 2 ? (values[2]?.ToString() ?? "") : "";
-                        string dept = values.Count > 3 ? (values[3]?.ToString() ?? "") : "소프트웨어융합학과";
-                        string advisor = values.Count > 4 ? (values[4]?.ToString() ?? "") : "김동욱 교수";
-                        string email = values.Count > 5 ? (values[5]?.ToString() ?? "") : "";
-                        bool isFixed = false;
-                        if (values.Count > 6)
+                        var dict = new Dictionary<string, object>
                         {
-                            bool.TryParse(values[6]?.ToString() ?? "", out isFixed);
-                        }
-
-                        var targetSeat = _activeSeats.FirstOrDefault(s => s.SeatNumber == seatNum);
-                        if (targetSeat != null && !targetSeat.IsPillar)
-                        {
-                            if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(name))
-                            {
-                                targetSeat.Student = null;
-                            }
-                            else
-                            {
-                                targetSeat.Student = new StudentInfo
-                                {
-                                    StudentId = id,
-                                    Name = name,
-                                    Department = dept,
-                                    Advisor = advisor,
-                                    Email = email
-                                };
-                                targetSeat.IsFixed = isFixed || dept.Contains("대학원");
-                            }
-                            importedCount++;
-                        }
+                            { "좌석번호", seat.SeatNumber },
+                            { "학번", seat.Student?.StudentId ?? "" },
+                            { "이름", seat.Student?.Name ?? "" },
+                            { "소속", seat.Student?.Department ?? "" },
+                            { "지도교수", seat.Student?.Advisor ?? "" },
+                            { "이메일", seat.Student?.Email ?? "" },
+                            { "고정여부", seat.IsFixed ? "고정" : "미고정" }
+                        };
+                        exportData.Add(dict);
                     }
 
-                    RenderSeatGrid();
-                    MessageBox.Show($"엑셀 파일로부터 {importedCount}개의 좌석 배치를 적용했습니다.", "가져오기 성공", MessageBoxButton.OK, MessageBoxImage.Information);
+                    MiniExcelLibs.MiniExcel.SaveAs(dialog.FileName, exportData);
+                    MessageBox.Show("좌석 학생 정보가 성공적으로 엑셀 파일로 저장되었습니다.", "내보내기 완료", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show($"엑셀 파일을 읽는 도중 오류가 발생했습니다: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                    MessageBox.Show($"파일 저장 중 오류가 발생했습니다: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
             }
         }
@@ -3466,7 +3444,7 @@ namespace SeatManagerApp
             var fresh = expired.Where(x => !_keptExpiredKeys.Contains(x.Key)).ToList();
             if (fresh.Count == 0) return;
 
-            var dialog = new ExpiredCleanupDialog(scope, _currentSimulatedDate, fresh.Select(x => x.Label).ToList())
+            var dialog = new ExpiredCleanupDialog(scope, _currentSimulatedDate, fresh.Select(x => (x.Key, x.Label)).ToList())
             {
                 Owner = this
             };
@@ -3479,14 +3457,30 @@ namespace SeatManagerApp
                 return;
             }
 
-            foreach (var entry in fresh) entry.Delete();
+            int deletedCount = 0;
+            foreach (var entry in fresh)
+            {
+                if (dialog.SelectedKeys.Contains(entry.Key))
+                {
+                    entry.Delete();
+                    deletedCount++;
+                }
+                else
+                {
+                    // 선택되지 않은 항목은 '유지' 처리하여 다음 번에 다시 묻지 않게 함
+                    _keptExpiredKeys.Add(entry.Key);
+                }
+            }
 
             if (scope == "대시보드") RenderSeatGrid();
             else if (scope == "기자재") BindEquipmentRentals();
             else if (scope == "캐비닛") RenderCabinetGrid();
 
             UpdateAlertBadges();
-            MessageBox.Show($"기간이 지난 {fresh.Count}건을 삭제했습니다.", "정리 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+            if (deletedCount > 0)
+            {
+                MessageBox.Show($"선택한 {deletedCount}건을 삭제했습니다.", "정리 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
         }
 
         /// <summary>대시보드 좌석 — 배정 기간이 끝난 학생.</summary>
@@ -3597,13 +3591,14 @@ namespace SeatManagerApp
     public class ExpiredCleanupDialog : Window
     {
         public bool DeleteConfirmed { get; private set; }
+        public List<string> SelectedKeys { get; private set; } = new List<string>();
 
-        public ExpiredCleanupDialog(string scope, DateTime today, List<string> labels)
+        public ExpiredCleanupDialog(string scope, DateTime today, List<(string Key, string Label)> items)
         {
             Title = $"{scope} 기간 만료 정리";
-            Width = 480;
+            Width = 520;
             SizeToContent = SizeToContent.Height;
-            MaxHeight = 520;
+            MaxHeight = 600;
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
             ResizeMode = ResizeMode.NoResize;
 
@@ -3611,7 +3606,7 @@ namespace SeatManagerApp
 
             root.Children.Add(new TextBlock
             {
-                Text = $"⏰ {scope} — 기간이 지난 항목 {labels.Count}건",
+                Text = $"⏰ {scope} — 기간이 지난 항목 {items.Count}건",
                 FontSize = 16,
                 FontWeight = FontWeights.Bold,
                 Foreground = new SolidColorBrush(Color.FromRgb(17, 24, 39)),
@@ -3620,32 +3615,65 @@ namespace SeatManagerApp
 
             root.Children.Add(new TextBlock
             {
-                Text = $"기준일 {today:yyyy-MM-dd} 보다 기간이 먼저 끝난 항목입니다.",
+                Text = $"기준일 {today:yyyy-MM-dd} 보다 기간이 먼저 끝난 항목입니다. 삭제할 항목을 선택해 주세요.",
                 FontSize = 12,
                 Foreground = new SolidColorBrush(Color.FromRgb(107, 114, 128)),
                 Margin = new Thickness(0, 0, 0, 14)
             });
 
+            var checkboxMap = new Dictionary<CheckBox, string>();
+
             var listBox = new ListBox
             {
-                MaxHeight = 260,
+                MaxHeight = 280,
                 BorderBrush = new SolidColorBrush(Color.FromRgb(229, 231, 235)),
                 BorderThickness = new Thickness(1),
-                Background = new SolidColorBrush(Color.FromRgb(249, 250, 251))
+                Background = new SolidColorBrush(Color.FromRgb(249, 250, 251)),
+                Margin = new Thickness(0, 0, 0, 10)
             };
-            foreach (string label in labels) listBox.Items.Add(label);
+
+            foreach (var item in items)
+            {
+                var cb = new CheckBox
+                {
+                    Content = item.Label,
+                    IsChecked = true,
+                    Margin = new Thickness(4),
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                listBox.Items.Add(cb);
+                checkboxMap[cb] = item.Key;
+            }
+
+            var selectAllCb = new CheckBox
+            {
+                Content = "전체 선택",
+                IsChecked = true,
+                Margin = new Thickness(4, 0, 0, 8),
+                FontWeight = FontWeights.Bold
+            };
+            selectAllCb.Checked += (s, e) =>
+            {
+                foreach (var cb in checkboxMap.Keys) cb.IsChecked = true;
+            };
+            selectAllCb.Unchecked += (s, e) =>
+            {
+                foreach (var cb in checkboxMap.Keys) cb.IsChecked = false;
+            };
+
+            root.Children.Add(selectAllCb);
             root.Children.Add(listBox);
 
             var buttonRow = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
                 HorizontalAlignment = HorizontalAlignment.Right,
-                Margin = new Thickness(0, 18, 0, 0)
+                Margin = new Thickness(0, 8, 0, 0)
             };
 
             var deleteBtn = new Button
             {
-                Content = "삭제",
+                Content = "선택 삭제",
                 Width = 100,
                 Height = 34,
                 Margin = new Thickness(0, 0, 8, 0),
@@ -3657,6 +3685,21 @@ namespace SeatManagerApp
             };
             deleteBtn.Click += (s, e) =>
             {
+                SelectedKeys.Clear();
+                foreach (var kvp in checkboxMap)
+                {
+                    if (kvp.Key.IsChecked == true)
+                    {
+                        SelectedKeys.Add(kvp.Value);
+                    }
+                }
+
+                if (SelectedKeys.Count == 0)
+                {
+                    MessageBox.Show("삭제할 항목을 최소 하나 이상 선택해 주세요.", "선택 확인", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
                 DeleteConfirmed = true;
                 DialogResult = true;
                 Close();
@@ -3674,6 +3717,12 @@ namespace SeatManagerApp
                 FontWeight = FontWeights.Bold,
                 BorderThickness = new Thickness(0),
                 Cursor = Cursors.Hand
+            };
+            keepBtn.Click += (s, e) =>
+            {
+                DeleteConfirmed = false;
+                DialogResult = false;
+                Close();
             };
 
             buttonRow.Children.Add(deleteBtn);

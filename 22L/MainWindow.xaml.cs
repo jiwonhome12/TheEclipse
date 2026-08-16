@@ -2213,68 +2213,46 @@ namespace SeatManagerApp
 
         private void BtnImportDashboardExcel_Click(object sender, RoutedEventArgs e)
         {
-            var dialog = new Microsoft.Win32.OpenFileDialog
+            var occupiedSeats = _activeSeats.Where(s => s.Student != null).OrderBy(s => s.SeatNumber).ToList();
+            if (occupiedSeats.Count == 0)
             {
-                Filter = "Excel Files (*.xlsx)|*.xlsx|All Files (*.*)|*.*",
-                Title = "대시보드 좌석 배치 엑셀 가져오기"
+                MessageBox.Show("대시보드에 착석한 학생 정보가 없습니다.", "알림", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var dialog = new Microsoft.Win32.SaveFileDialog
+            {
+                Filter = "Excel Files (*.xlsx)|*.xlsx",
+                Title = "대시보드 학생 정보 엑셀 내보내기",
+                FileName = $"대시보드_학생현황_{_currentSimulatedDate:yyyyMMdd}.xlsx"
             };
+
             if (dialog.ShowDialog() == true)
             {
                 try
                 {
-                    var rows = MiniExcelLibs.MiniExcel.Query(dialog.FileName).ToList();
-                    int importedCount = 0;
-                    foreach (IDictionary<string, object> row in rows)
+                    var exportData = new List<Dictionary<string, object>>();
+                    foreach (var seat in occupiedSeats)
                     {
-                        var values = row.Values.ToList();
-                        if (values.Count < 2) continue;
-
-                        string col0 = values[0]?.ToString() ?? "";
-                        if (col0 == "SeatNumber" || col0 == "좌석번호" || string.IsNullOrWhiteSpace(col0)) continue;
-
-                        int.TryParse(col0, out int seatNum);
-                        if (seatNum <= 0) continue;
-
-                        string id = values.Count > 1 ? (values[1]?.ToString() ?? "") : "";
-                        string name = values.Count > 2 ? (values[2]?.ToString() ?? "") : "";
-                        string dept = values.Count > 3 ? (values[3]?.ToString() ?? "") : "소프트웨어융합학과";
-                        string advisor = values.Count > 4 ? (values[4]?.ToString() ?? "") : "김동욱 교수";
-                        string email = values.Count > 5 ? (values[5]?.ToString() ?? "") : "";
-                        bool isFixed = false;
-                        if (values.Count > 6)
+                        var dict = new Dictionary<string, object>
                         {
-                            bool.TryParse(values[6]?.ToString() ?? "", out isFixed);
-                        }
-
-                        var targetSeat = _activeSeats.FirstOrDefault(s => s.SeatNumber == seatNum);
-                        if (targetSeat != null && !targetSeat.IsPillar)
-                        {
-                            if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(name))
-                            {
-                                targetSeat.Student = null;
-                            }
-                            else
-                            {
-                                targetSeat.Student = new StudentInfo
-                                {
-                                    StudentId = id,
-                                    Name = name,
-                                    Department = dept,
-                                    Advisor = advisor,
-                                    Email = email
-                                };
-                                targetSeat.IsFixed = isFixed || dept.Contains("대학원");
-                            }
-                            importedCount++;
-                        }
+                            { "좌석번호", seat.SeatNumber },
+                            { "학번", seat.Student?.StudentId ?? "" },
+                            { "이름", seat.Student?.Name ?? "" },
+                            { "소속", seat.Student?.Department ?? "" },
+                            { "지도교수", seat.Student?.Advisor ?? "" },
+                            { "이메일", seat.Student?.Email ?? "" },
+                            { "고정여부", seat.IsFixed ? "고정" : "미고정" }
+                        };
+                        exportData.Add(dict);
                     }
 
-                    RenderSeatGrid();
-                    MessageBox.Show($"엑셀 파일로부터 {importedCount}개의 좌석 배치를 적용했습니다.", "가져오기 성공", MessageBoxButton.OK, MessageBoxImage.Information);
+                    MiniExcelLibs.MiniExcel.SaveAs(dialog.FileName, exportData);
+                    MessageBox.Show("좌석 학생 정보가 성공적으로 엑셀 파일로 저장되었습니다.", "내보내기 완료", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show($"엑셀 파일을 읽는 도중 오류가 발생했습니다: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                    MessageBox.Show($"파일 저장 중 오류가 발생했습니다: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
             }
         }
