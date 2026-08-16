@@ -550,6 +550,7 @@
                             <DataGrid x:Name="GridEquipmentIssues" AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True"
                                       CanUserReorderColumns="False" CanUserSortColumns="False"
                                       RowDetailsVisibilityMode="VisibleWhenSelected"
+                                      PreviewMouseLeftButtonDown="DataGrid_PreviewMouseLeftButtonDown"
                                       HeadersVisibility="Column" GridLinesVisibility="Horizontal" RowHeight="34"
                                       BorderThickness="0" Background="Transparent" FontSize="11"
                                       AlternationCount="2" RowBackground="White" AlternatingRowBackground="#F3F4F6">
@@ -649,6 +650,7 @@
                                 <DataGrid x:Name="GridQuestRentals" AutoGenerateColumns="False" CanUserAddRows="False" 
                                           CanUserReorderColumns="False" CanUserSortColumns="False"
                                           RowDetailsVisibilityMode="VisibleWhenSelected"
+                                          PreviewMouseLeftButtonDown="DataGrid_PreviewMouseLeftButtonDown"
                                           HeadersVisibility="Column" GridLinesVisibility="Horizontal" RowHeight="40"
                                           BorderThickness="0" Background="Transparent" AlternatingRowBackground="#F9FAFB"
                                           FontSize="11">
@@ -765,6 +767,7 @@
                                 <DataGrid x:Name="GridLaptopRentals" AutoGenerateColumns="False" CanUserAddRows="False" 
                                           CanUserReorderColumns="False" CanUserSortColumns="False"
                                           RowDetailsVisibilityMode="VisibleWhenSelected"
+                                          PreviewMouseLeftButtonDown="DataGrid_PreviewMouseLeftButtonDown"
                                           HeadersVisibility="Column" GridLinesVisibility="Horizontal" RowHeight="40"
                                           BorderThickness="0" Background="Transparent" AlternatingRowBackground="#F9FAFB"
                                           FontSize="11">
@@ -1408,7 +1411,7 @@
 
         <!-- ================= APPROVAL/REJECTION HISTORY OVERLAY ================= -->
         <Grid x:Name="ModalApprovalHistory" Grid.ColumnSpan="2" Background="#80000000" Visibility="Collapsed">
-            <Border Background="White" Width="820" Height="520" CornerRadius="20" Padding="35" VerticalAlignment="Center" HorizontalAlignment="Center">
+            <Border Background="White" Width="900" Height="520" CornerRadius="20" Padding="35" VerticalAlignment="Center" HorizontalAlignment="Center">
                 <Border.Effect>
                     <DropShadowEffect BlurRadius="25" ShadowDepth="0" Color="Black" Opacity="0.25"/>
                 </Border.Effect>
@@ -1425,12 +1428,12 @@
                     <Border Grid.Row="1" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="8" Background="#F9FAFB">
                         <DataGrid x:Name="GridApprovalHistory" AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column" GridLinesVisibility="Horizontal" RowHeight="40" BorderThickness="0" Background="Transparent">
                             <DataGrid.Columns>
-                                <DataGridTextColumn Header="구분" Binding="{Binding TabType}" Width="100" IsReadOnly="True"/>
-                                <DataGridTextColumn Header="신청 일자" Binding="{Binding RequestDate, StringFormat=\{0:yyyy-MM-dd HH:mm\}}" Width="130" IsReadOnly="True"/>
-                                <DataGridTextColumn Header="학번" Binding="{Binding StudentId}" Width="100" IsReadOnly="True"/>
-                                <DataGridTextColumn Header="이름" Binding="{Binding StudentName}" Width="100" IsReadOnly="True"/>
-                                <DataGridTextColumn Header="소속" Binding="{Binding Department}" Width="150" IsReadOnly="True"/>
-                                <DataGridTextColumn Header="상태" Binding="{Binding Status}" Width="100" IsReadOnly="True"/>
+                                <DataGridTextColumn Header="구분" Binding="{Binding TabType}" Width="70" IsReadOnly="True"/>
+                                <DataGridTextColumn Header="신청 일자" Binding="{Binding RequestDate, StringFormat=\{0:yyyy-MM-dd HH:mm\}}" Width="120" IsReadOnly="True"/>
+                                <DataGridTextColumn Header="학번" Binding="{Binding StudentId}" Width="85" IsReadOnly="True"/>
+                                <DataGridTextColumn Header="이름" Binding="{Binding StudentName}" Width="75" IsReadOnly="True"/>
+                                <DataGridTextColumn Header="소속" Binding="{Binding Department}" Width="130" IsReadOnly="True"/>
+                                <DataGridTextColumn Header="상태" Binding="{Binding Status}" Width="80" IsReadOnly="True"/>
                                 <DataGridTemplateColumn Header="대기 목록으로 복구" Width="*">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
@@ -1447,7 +1450,7 @@
 
         <!-- ================= RENTAL HISTORY OVERLAY ================= -->
         <Grid x:Name="ModalRentalHistory" Grid.ColumnSpan="2" Background="#80000000" Visibility="Collapsed">
-            <Border Background="White" Width="820" Height="520" CornerRadius="20" Padding="35" VerticalAlignment="Center" HorizontalAlignment="Center">
+            <Border Background="White" Width="900" Height="520" CornerRadius="20" Padding="35" VerticalAlignment="Center" HorizontalAlignment="Center">
                 <Border.Effect>
                     <DropShadowEffect BlurRadius="25" ShadowDepth="0" Color="Black" Opacity="0.25"/>
                 </Border.Effect>

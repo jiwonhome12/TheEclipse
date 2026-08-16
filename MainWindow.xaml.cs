@@ -3582,6 +3582,38 @@ namespace SeatManagerApp
 
             return approved?.RentalPeriod ?? string.Empty;
         }
+
+        private void DataGrid_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is not DataGrid grid) return;
+
+            // Find the clicked element
+            var dep = (DependencyObject)e.OriginalSource;
+
+            // If clicked on a Button or its children, do nothing
+            var current = dep;
+            while (current != null && current != grid)
+            {
+                if (current is Button) return;
+                current = VisualTreeHelper.GetParent(current);
+            }
+
+            // Find the DataGridRow
+            current = dep;
+            while (current != null && current is not DataGridRow)
+            {
+                current = VisualTreeHelper.GetParent(current);
+            }
+
+            if (current is DataGridRow row)
+            {
+                if (row.IsSelected)
+                {
+                    grid.SelectedItem = null;
+                    e.Handled = true;
+                }
+            }
+        }
     }
 
     /// <summary>
