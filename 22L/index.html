@@ -1,0 +1,1940 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>동서대학교 좌석 및 기자재 관리 시스템</title> 
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --primary-light: #dbeafe;
+            --bg-sidebar: #0A1C3E;
+            --bg-body: #f8fafc;
+            --text-dark: #0f172a;
+            --text-muted: #64748b;
+            --border-color: #e2e8f0;
+            --danger: #ef4444;
+            --danger-bg: #fee2e2;
+            --danger-text: #991b1b;
+            --warning: #f97316;
+            --warning-bg: #ffedd5;
+            --warning-text: #9a3412;
+            --success: #10b981;
+            --success-bg: #d1fae5;
+            --success-text: #065f46;
+            --glass-bg: rgba(255, 255, 255, 0.8);
+            --glass-border: rgba(255, 255, 255, 0.4);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', 'Noto Sans KR', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-body);
+            color: var(--text-dark);
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* Sidebar Styling */
+        aside {
+            width: 260px;
+            background-color: var(--bg-sidebar);
+            color: #f1f5f9;
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            z-index: 10;
+            box-shadow: 4px 0 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .logo-area {
+            height: 75px;
+            display: flex;
+            align-items: center;
+            padding: 0 24px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .logo-area h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 24px;
+            font-weight: 700;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .logo-area h1 span {
+            color: #93c5fd;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .sidebar-menu {
+            list-style: none;
+            padding: 16px 0;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            flex-grow: 1;
+        }
+
+        .menu-item {
+            padding: 0 12px;
+        }
+
+        .menu-btn {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 16px;
+            color: #94a3b8;
+            background: transparent;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            text-align: left;
+            transition: all 0.2s ease;
+        }
+
+        .menu-btn:hover {
+            background-color: rgba(255, 255, 255, 0.05);
+            color: #f8fafc;
+        }
+
+        .menu-btn.active {
+            background-color: var(--primary);
+            color: #ffffff;
+            font-weight: 600;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+        }
+
+        /* Main Content Wrapper */
+        .main-wrapper {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Top Header */
+        header {
+            height: 75px;
+            background-color: #ffffff;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 32px;
+            z-index: 5;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+        }
+
+        .header-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text-dark);
+        }
+
+        .alerts-panel {
+            display: flex;
+            gap: 12px;
+        }
+
+        .alert-card {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 16px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            border: 1px solid transparent;
+        }
+
+        .alert-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+
+        .alert-card.danger {
+            background-color: var(--danger-bg);
+            border-color: #fca5a5;
+            color: var(--danger-text);
+        }
+
+        .alert-card.warning {
+            background-color: var(--warning-bg);
+            border-color: #fed7aa;
+            color: var(--warning-text);
+        }
+
+        .alert-icon {
+            font-size: 18px;
+        }
+
+        .alert-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .alert-val {
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .date-display {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-muted);
+            background-color: #f1f5f9;
+            padding: 8px 16px;
+            border-radius: 8px;
+        }
+
+        .admin-profile {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-dark);
+            cursor: pointer;
+        }
+
+        /* Content Sections */
+        .content-container {
+            flex-grow: 1;
+            padding: 24px 32px;
+            overflow-y: auto;
+        }
+
+        .tab-section {
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .tab-section.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Dashboard Specific Style */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 3fr 2fr;
+            gap: 24px;
+            height: 100%;
+        }
+
+        .panel-card {
+            background: #ffffff;
+            border-radius: 16px;
+            border: 1px solid var(--border-color);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        }
+
+        .panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .panel-title {
+            font-size: 16px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Filter Controls */
+        .filter-controls {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        select, input, button.btn-secondary {
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            font-size: 13px;
+            font-weight: 500;
+            background-color: #ffffff;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+
+        select:focus, input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--primary-light);
+        }
+
+        button.btn-primary {
+            background-color: var(--primary);
+            color: #ffffff;
+            border: none;
+            font-weight: 600;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+
+        button.btn-primary:hover {
+            background-color: var(--primary-hover);
+        }
+
+        button.btn-refresh {
+            width: 36px;
+            height: 36px;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            background-color: #ffffff;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        button.btn-refresh:hover {
+            background-color: var(--primary-light);
+            border-color: var(--primary);
+        }
+
+        .mode-toggle {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .toggle-btn {
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1px solid var(--border-color);
+            background: #ffffff;
+            transition: all 0.2s ease;
+        }
+
+        .toggle-btn.active {
+            background: #eff6ff;
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        /* Seating Map Grid */
+        .seating-map-container {
+            flex-grow: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #f8fafc;
+            border-radius: 12px;
+            padding: 16px;
+            border: 1px dashed var(--border-color);
+            overflow: auto;
+        }
+
+        .seating-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 72px) 30px repeat(4, 72px);
+            grid-auto-rows: 72px;
+            gap: 8px;
+        }
+
+        .seat-item {
+            background: #ffffff;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 6px;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.2s ease;
+            user-select: none;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+        }
+
+        .seat-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            border-color: #cbd5e1;
+        }
+
+        .seat-item.occupied {
+            background: #eff6ff;
+            border-color: #93c5fd;
+        }
+
+        .seat-item.selected {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--primary-light);
+        }
+
+        .seat-item.fixed {
+            border-left: 4px solid var(--primary);
+        }
+
+        .seat-item.gray-zone {
+            background-color: #f1f5f9;
+        }
+
+        .seat-item.pillar {
+            grid-column: span 2;
+            background: #cbd5e1;
+            border: none;
+            cursor: not-allowed;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            font-weight: 700;
+            color: #64748b;
+        }
+
+        .seat-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--text-muted);
+        }
+
+        .seat-item.occupied .seat-header {
+            color: var(--primary);
+        }
+
+        .seat-fixed-icon {
+            font-size: 10px;
+            color: var(--primary);
+        }
+
+        .seat-student-name {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text-dark);
+            text-align: center;
+            margin-top: 4px;
+        }
+
+        .seat-student-id {
+            font-size: 9px;
+            color: var(--text-muted);
+            text-align: center;
+        }
+
+        .aisle {
+            grid-column: 4;
+            pointer-events: none;
+        }
+
+        /* Right Panel Memos */
+        .right-side-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .memo-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            overflow-y: auto;
+            flex-grow: 1;
+            max-height: 250px;
+        }
+
+        .memo-card {
+            background-color: #fdfefe;
+            border: 1px solid var(--border-color);
+            border-left: 4px solid #facc15;
+            padding: 12px;
+            border-radius: 8px;
+            position: relative;
+            transition: all 0.2s ease;
+        }
+
+        .memo-card:hover {
+            box-shadow: 0 4px 8px rgba(0,0,0,0.03);
+        }
+
+        .memo-content {
+            font-size: 13px;
+            font-weight: 500;
+            color: #334155;
+            line-height: 1.5;
+        }
+
+        .memo-edit-input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid var(--primary);
+            border-radius: 6px;
+            font-size: 13px;
+            font-family: 'Inter', 'Noto Sans KR', sans-serif;
+            outline: none;
+            box-shadow: 0 0 0 2px var(--primary-light);
+        }
+
+        .memo-actions {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            display: none;
+            gap: 6px;
+        }
+
+        .memo-card:hover .memo-actions {
+            display: flex;
+        }
+
+        .action-icon-btn {
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .action-icon-btn:hover {
+            color: var(--text-dark);
+        }
+
+        /* Quick Stat Summary */
+        .quick-stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+        }
+
+        .stat-card {
+            padding: 16px;
+            border-radius: 12px;
+            background: #ffffff;
+            border: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .stat-icon {
+            font-size: 24px;
+            width: 44px;
+            height: 44px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .stat-icon.blue { background-color: #eff6ff; color: var(--primary); }
+        .stat-icon.green { background-color: #ecfdf5; color: var(--success); }
+
+        .stat-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        .stat-value {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text-dark);
+        }
+
+        /* Tables & Lists standard styles */
+        .data-table-container {
+            width: 100%;
+            overflow-x: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            background: #ffffff;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 13px;
+        }
+
+        th {
+            background-color: #f8fafc;
+            padding: 14px 16px;
+            font-weight: 600;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        td {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-dark);
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover td {
+            background-color: #f8fafc;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .status-badge.danger { background-color: var(--danger-bg); color: var(--danger-text); }
+        .status-badge.warning { background-color: var(--warning-bg); color: var(--warning-text); }
+        .status-badge.success { background-color: var(--success-bg); color: var(--success-text); }
+        .status-badge.neutral { background-color: #f1f5f9; color: #475569; }
+
+        /* Dialog/Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(15, 23, 42, 0.4);
+            backdrop-filter: blur(4px);
+            z-index: 100;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-card {
+            background: #ffffff;
+            border-radius: 16px;
+            width: 450px;
+            max-width: 90%;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            animation: modalSlide 0.25s ease-out;
+        }
+
+        @keyframes modalSlide {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .modal-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-title {
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            color: var(--text-muted);
+        }
+
+        .modal-body {
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .form-group label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .modal-footer {
+            padding: 16px 20px;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            background-color: #f8fafc;
+        }
+
+        /* Tab Layouts Grid */
+        .tab-grid-layout {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .split-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+
+        .sangsang-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 16px;
+        }
+
+        .approval-card {
+            background: #ffffff;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+            transition: all 0.2s ease;
+        }
+
+        .approval-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        }
+
+        .approval-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .approval-name {
+            font-size: 15px;
+            font-weight: 700;
+        }
+
+        .approval-details {
+            font-size: 12px;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+
+        .approval-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .btn-success {
+            background-color: var(--success);
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .btn-danger {
+            background-color: var(--danger);
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 12px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Sidebar -->
+    <aside>
+        <div class="logo-area">
+            <h1>DSU <span>동서대학교</span></h1>
+        </div>
+        <ul class="sidebar-menu">
+            <li class="menu-item">
+                <button class="menu-btn active" onclick="switchTab('dashboard', this)">
+                    <span>🏠</span> 대시보드
+                </button>
+            </li>
+            <li class="menu-item">
+                <button class="menu-btn" onclick="switchTab('equipment', this)">
+                    <span>🔧</span> 기자재 현황
+                </button>
+            </li>
+            <li class="menu-item">
+                <button class="menu-btn" onclick="switchTab('cabinet', this)">
+                    <span>🗄️</span> 캐비닛 현황
+                </button>
+            </li>
+            <li class="menu-item">
+                <button class="menu-btn" onclick="switchTab('sangsanglab', this)">
+                    <span>💡</span> 상상Lab 승인
+                </button>
+            </li>
+            <li class="menu-item">
+                <button class="menu-btn" onclick="switchTab('datamanage', this)">
+                    <span>📊</span> 데이터 관리
+                </button>
+            </li>
+            <li class="menu-item">
+                <button class="menu-btn" onclick="switchTab('settings', this)">
+                    <span>⚙️</span> 설정
+                </button>
+            </li>
+        </ul>
+    </aside>
+
+    <!-- Main Wrapper -->
+    <div class="main-wrapper">
+        <!-- Top Header -->
+        <header>
+            <div class="header-left">
+                <div class="header-title" id="page-title">대시보드</div>
+                <div class="alerts-panel" id="header-alerts">
+                    <!-- Alerts dynamically loaded -->
+                    <div class="alert-card danger" onclick="navigateToTab('sangsanglab')">
+                        <span class="alert-icon">💡</span>
+                        <div class="alert-info">
+                            <span class="alert-label">상상Lab 승인 대기</span>
+                            <span class="alert-val" id="alert-sangsanglab-count">0건</span>
+                        </div>
+                    </div>
+                    <div class="alert-card warning" onclick="navigateToTab('cabinet')">
+                        <span class="alert-icon">🗄️</span>
+                        <div class="alert-info">
+                            <span class="alert-label">캐비닛</span>
+                            <span class="alert-val" id="alert-cabinet-count">0건</span>
+                        </div>
+                    </div>
+                    <div class="alert-card danger" onclick="navigateToTab('equipment')">
+                        <span class="alert-icon">🔧</span>
+                        <div class="alert-info">
+                            <span class="alert-label">기자재</span>
+                            <span class="alert-val" id="alert-rental-count">0건</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="date-display" id="current-date">2026-07-20 (월)</div>
+                <div class="admin-profile">
+                    <span>👤</span>
+                    <span>관리자</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Content Container -->
+        <div class="content-container">
+
+            <!-- 1. Dashboard Tab -->
+            <section id="tab-dashboard" class="tab-section active">
+                <div class="dashboard-grid">
+                    <!-- Left: Seat Map Card -->
+                    <div class="panel-card">
+                        <div class="panel-header">
+                            <div class="panel-title">🪑 좌석 배치도</div>
+                            <div class="filter-controls">
+                                <select id="select-year" onchange="loadSeats()">
+                                    <option value="2026">2026년</option>
+                                    <option value="2025">2025년</option>
+                                    <option value="2024">2024년</option>
+                                </select>
+                                <select id="select-semester" onchange="loadSeats()">
+                                    <option value="여름방학">여름방학</option>
+                                    <option value="1학기">1학기</option>
+                                    <option value="2학기">2학기</option>
+                                    <option value="겨울방학">겨울방학</option>
+                                </select>
+                                <button class="btn-refresh" onclick="loadSeats()" title="새로고침" style="font-size: 16px; display: flex; align-items: center; justify-content: center; width: 35px; height: 35px; padding: 0;">↻</button>
+                            </div>
+                        </div>
+
+                        <!-- Mode Selection -->
+                        <div class="mode-toggle">
+                            <button id="mode-normal" class="toggle-btn active" onclick="setMode('normal')">일반 모드</button>
+                            <button id="mode-fix" class="toggle-btn" onclick="setMode('fix')">📌 고정 모드</button>
+                            <button id="mode-delete" class="toggle-btn" onclick="setMode('delete')">❌ 삭제 모드</button>
+                            <button class="toggle-btn" onclick="randomizeSeats()" style="background: #ecfdf5; border-color: var(--success); color: var(--success);">🎲 랜덤 배치</button>
+                        </div>
+
+                        <!-- Seating Grid -->
+                        <div class="seating-map-container">
+                            <div class="seating-grid" id="seating-grid">
+                                <!-- Generated Dynamically -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Quick Stats & Memos -->
+                    <div class="right-side-panel">
+                        <!-- Stats -->
+                        <div class="quick-stats">
+                            <div class="stat-card">
+                                <div class="stat-icon blue">🪑</div>
+                                <div>
+                                    <div class="stat-label">이용 중인 좌석</div>
+                                    <div class="stat-value" id="stats-occupied-seats">30 / 52</div>
+                                </div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-icon green">🔧</div>
+                                <div>
+                                    <div class="stat-label">총 대여 기자재</div>
+                                    <div class="stat-value" id="stats-active-rentals">4개</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Memos -->
+                        <div class="panel-card" style="flex-grow: 1;">
+                            <div class="panel-header">
+                                <div class="panel-title">📝 실시간 메모</div>
+                                <button class="btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="openMemoModal()">+ 추가</button>
+                            </div>
+                            <div class="memo-list" id="memo-list">
+                                <!-- Dynamic Memos -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 2. Equipment Tab -->
+            <section id="tab-equipment" class="tab-section">
+                <div class="tab-grid-layout">
+                    <div class="quick-stats">
+                        <div class="stat-card">
+                            <div class="stat-icon blue">📦</div>
+                            <div>
+                                <div class="stat-label">보유 기자재</div>
+                                <div class="stat-value">24개</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon green">🤝</div>
+                            <div>
+                                <div class="stat-label">대여 중인 기자재</div>
+                                <div class="stat-value" id="equipment-rented-count">4개</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel-card">
+                        <div class="panel-header">
+                            <div class="panel-title">🔧 대여 현황</div>
+                            <button class="btn-primary" onclick="openRentalModal()">+ 신규 대여 등록</button>
+                        </div>
+                        <div class="data-table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>대여자 이름</th>
+                                        <th>대여 기기</th>
+                                        <th>대여 일자</th>
+                                        <th>반납 예정일</th>
+                                        <th>상태</th>
+                                        <th>작업</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="rentals-table-body">
+                                    <!-- Dynamic rows -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 3. Cabinet Tab -->
+            <section id="tab-cabinet" class="tab-section">
+                <div class="tab-grid-layout">
+                    <div class="split-grid">
+                        <div class="panel-card">
+                            <div class="panel-header">
+                                <div class="panel-title">🗄️ 캐비닛 배정 승인 요청</div>
+                            </div>
+                            <div class="data-table-container">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>이름</th>
+                                            <th>학번</th>
+                                            <th>학과</th>
+                                            <th>작업</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="cabinet-approvals-body">
+                                        <!-- Dynamic rows -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div class="panel-card">
+                            <div class="panel-header">
+                                <div class="panel-title">🗄️ 캐비닛 배정 현황</div>
+                            </div>
+                            <div style="font-size: 13px; color: var(--text-muted); text-align: center; padding: 40px 0;">
+                                캐비닛 배치도 및 상세 정보가 여기에 표시됩니다 (43개 사용 가능, 5개 사용 중)
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 4. SangsangLab Tab -->
+            <section id="tab-sangsanglab" class="tab-section">
+                <div class="panel-card">
+                    <div class="panel-header">
+                        <div class="panel-title">💡 상상Lab 이용 신청 승인</div>
+                    </div>
+                    <div class="sangsang-grid" id="sangsang-cards-container">
+                        <!-- Dynamic Cards -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- 5. Data Manage Tab -->
+            <section id="tab-datamanage" class="tab-section">
+                <div class="panel-card">
+                    <div class="panel-header">
+                        <div class="panel-title">📊 학생 마스터 데이터베이스</div>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" id="search-student" placeholder="이름 또는 학번 검색..." oninput="filterMasterStudents()" style="width: 250px;">
+                            <button class="btn-primary" onclick="syncDataFromForm()" title="구글폼 데이터 다시 불러오기">↻ 동기화</button>
+                        </div>
+                    </div>
+                    <div class="data-table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>학번</th>
+                                    <th>이름</th>
+                                    <th>소속 학과</th>
+                                    <th>지도교수</th>
+                                    <th>이메일</th>
+                                    <th>출석현황 (3일)</th>
+                                    <th>작업</th>
+                                </tr>
+                            </thead>
+                            <tbody id="master-students-body">
+                                <!-- Dynamic rows -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 6. Settings Tab -->
+            <section id="tab-settings" class="tab-section">
+                <div class="panel-card">
+                    <div class="panel-header">
+                        <div class="panel-title">⚙️ 시스템 설정</div>
+                    </div>
+                    <p style="font-size: 14px; color: var(--text-muted);">시스템 설정 및 구글 폼 연동 관리를 구성할 수 있습니다.</p>
+                </div>
+            </section>
+
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <!-- Seat Edit Modal -->
+    <div class="modal-overlay" id="seat-modal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <div class="modal-title" id="seat-modal-title">좌석 상세 정보</div>
+                <button class="close-btn" onclick="closeModal('seat-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>배정 학생 선택</label>
+                    <select id="modal-student-select">
+                        <!-- Dynamic student list -->
+                    </select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>좌석 번호</label>
+                        <input type="text" id="modal-seat-num" readonly style="background-color: #f1f5f9;">
+                    </div>
+                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 8px; margin-top: 24px;">
+                        <input type="checkbox" id="modal-seat-fixed">
+                        <label for="modal-seat-fixed" style="cursor: pointer;">📌 고정석 지정</label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeModal('seat-modal')">취소</button>
+                <button class="btn-danger" id="btn-modal-clear" onclick="clearSeatFromModal()">배정 해제</button>
+                <button class="btn-primary" onclick="saveSeatModal()">저장</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Memo Modal -->
+    <div class="modal-overlay" id="memo-modal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <div class="modal-title" id="memo-modal-title">메모 추가</div>
+                <button class="close-btn" onclick="closeModal('memo-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>내용</label>
+                    <input type="text" id="modal-memo-content" placeholder="메모할 내용을 적어주세요.">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeModal('memo-modal')">취소</button>
+                <button class="btn-primary" onclick="saveMemoModal()">저장</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rental Registration Modal -->
+    <div class="modal-overlay" id="rental-modal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <div class="modal-title">신규 기자재 대여 등록</div>
+                <button class="close-btn" onclick="closeModal('rental-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>학생 선택</label>
+                    <select id="modal-rental-student">
+                        <!-- Dynamic list -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>대여 기기</label>
+                    <input type="text" id="modal-rental-device" placeholder="예: Oculus Quest 2, iPad Pro 등">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>대여 기간 (일)</label>
+                        <input type="number" id="modal-rental-days" value="7">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeModal('rental-modal')">취소</button>
+                <button class="btn-primary" onclick="saveRentalModal()">대여 완료</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Student Edit Modal -->
+    <div class="modal-overlay" id="student-edit-modal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <div class="modal-title">학생 정보 수정</div>
+                <button class="close-btn" onclick="closeModal('student-edit-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>학번</label>
+                    <input type="text" id="edit-student-id" readonly style="background-color: #f1f5f9;">
+                </div>
+                <div class="form-group">
+                    <label>이름</label>
+                    <input type="text" id="edit-student-name">
+                </div>
+                <div class="form-group">
+                    <label>소속 학과</label>
+                    <input type="text" id="edit-student-department">
+                </div>
+                <div class="form-group">
+                    <label>지도교수</label>
+                    <input type="text" id="edit-student-advisor">
+                </div>
+                <div class="form-group">
+                    <label>이메일</label>
+                    <input type="text" id="edit-student-email">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeModal('student-edit-modal')">취소</button>
+                <button class="btn-primary" onclick="saveStudentEdit()">저장</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application Script -->
+    <script>
+        // --- Mock Databases ---
+        const masterStudents = [
+            { studentId: "20212958", name: "임진섭", department: "컴퓨터공학과", advisor: "김동욱 교수", email: "student0@dsu.ac.kr", attendance: ["출석", "출석", "출석"], isNew: false },
+            { studentId: "20235841", name: "김지원", department: "소프트웨어융합학과", advisor: "이지현 교수", email: "student1@dsu.ac.kr", attendance: ["출석", "결석", "출석"], isNew: false },
+            { studentId: "20228394", name: "송유진", department: "정보보안학과", advisor: "박상우 교수", email: "student2@dsu.ac.kr", attendance: ["지각", "출석", "출석"], isNew: false },
+            { studentId: "20241029", name: "문현수", department: "게임공학과", advisor: "최준호 교수", email: "student3@dsu.ac.kr", attendance: ["출석", "출석", "출석"], isNew: false },
+            { studentId: "20221948", name: "현길용", department: "컴퓨터공학과", advisor: "김동욱 교수", email: "student4@dsu.ac.kr", attendance: ["출석", "지각", "출석"], isNew: false },
+            { studentId: "20234859", name: "박주은", department: "정보보안학과", advisor: "이지현 교수", email: "student5@dsu.ac.kr", attendance: ["출석", "출석", "출석"], isNew: false },
+            { studentId: "20210294", name: "이인한", department: "게임공학과", advisor: "최준호 교수", email: "student6@dsu.ac.kr", attendance: ["결석", "출석", "출석"], isNew: false },
+            { studentId: "20231948", name: "이소빈", department: "소프트웨어융합학과", advisor: "박상우 교수", email: "student7@dsu.ac.kr", attendance: ["출석", "출석", "출석"], isNew: false }
+        ];
+
+        // Seating data cached by year_semester
+        let seatLayouts = {
+            "2026_여름방학": Array.from({ length: 52 }, (_, i) => ({
+                seatNumber: i + 1,
+                studentId: i < masterStudents.length ? masterStudents[i].studentId : null,
+                isFixed: i === 0 || i === 1 || (i >= 42 && i <= 51), // 43-52번은 대학원생 좌석 고정
+                isSelected: false,
+                isPillar: i === 21 // Seat 22 is pillar
+            }))
+        };
+
+        let activeRentals = [];
+
+        let approvals = [];
+
+        let memos = [
+            { id: 1, content: "3층 강의실 컴퓨터 포멧" },
+            { id: 2, content: "지문 고장 / 수리기사님 7/22 방문 예정" },
+            { id: 3, content: "3~4층 에어컨 고밀도 필터 교환 건" }
+        ];
+
+        let currentMode = 'normal'; // 'normal', 'fix', 'delete'
+        let currentEditingSeatIndex = null;
+        let currentEditingMemoId = null;
+
+        // --- Core Functions ---
+
+        // Switch navigation tabs
+        function switchTab(tabId, element) {
+            document.querySelectorAll('.menu-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-section').forEach(sec => sec.classList.remove('active'));
+
+            element.classList.add('active');
+            document.getElementById(`tab-${tabId}`).classList.add('active');
+
+            // Format Title
+            const tabTitles = {
+                dashboard: "대시보드",
+                equipment: "기자재 현황",
+                cabinet: "캐비닛 현황",
+                sangsanglab: "상상Lab 승인",
+                datamanage: "데이터 관리",
+                settings: "설정"
+            };
+            document.getElementById('page-title').innerText = tabTitles[tabId];
+
+            // Render specific components on tab enter
+            if (tabId === 'dashboard') {
+                loadSeats();
+            } else if (tabId === 'equipment') {
+                renderRentals();
+            } else if (tabId === 'cabinet') {
+                renderCabinetApprovals();
+            } else if (tabId === 'sangsanglab') {
+                renderSangsangLab();
+            } else if (tabId === 'datamanage') {
+                renderMasterStudents();
+            }
+        }
+
+        function navigateToTab(tabId) {
+            const menuBtn = Array.from(document.querySelectorAll('.menu-btn')).find(btn => btn.innerText.includes(tabId === 'sangsanglab' ? '상상Lab' : tabId === 'cabinet' ? '캐비닛' : '기자재'));
+            if (menuBtn) switchTab(tabId, menuBtn);
+        }
+
+        // Set Dashboard Grid Mode
+        function setMode(mode) {
+            currentMode = mode;
+            document.querySelectorAll('#mode-normal, #mode-fix, #mode-delete').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`mode-${mode}`).classList.add('active');
+        }
+
+        function randomizeSeats() {
+            const year = document.getElementById('select-year').value;
+            const semester = document.getElementById('select-semester').value;
+            const key = `${year}_${semester}`;
+
+            if (!seatLayouts[key]) return;
+
+            // 새로운 학생들만 필터링 (isNew = true)
+            const newStudents = masterStudents.filter(s => s.isNew);
+
+            if (newStudents.length === 0) {
+                alert('추가된 학생이 없습니다.');
+                return;
+            }
+
+            // 랜덤 배치 가능한 좌석: 대학원 제외(43-52), 고정석 제외, 기둥 제외
+            const randomizableSeats = seatLayouts[key].filter(s =>
+                s.seatNumber < 43 && !s.isFixed && !s.isPillar
+            );
+
+            // 비어있는 좌석만 필터링
+            const emptySeats = randomizableSeats.filter(s => !s.studentId);
+
+            if (emptySeats.length < newStudents.length) {
+                alert(`빈 좌석이 부족합니다. (필요: ${newStudents.length}개, 사용 가능: ${emptySeats.length}개)`);
+                return;
+            }
+
+            // 뒷자리부터 배정 (높은 번호 우선)
+            emptySeats.sort((a, b) => b.seatNumber - a.seatNumber);
+
+            newStudents.forEach((student, idx) => {
+                if (idx < emptySeats.length) {
+                    emptySeats[idx].studentId = student.studentId;
+                    student.isNew = false; // 배치 완료 후 isNew 해제
+                }
+            });
+
+            loadSeats();
+            alert(`${newStudents.length}명의 학생이 랜덤 배치되었습니다.`);
+        }
+
+        // Load and Render Seating Grid
+        function loadSeats() {
+            const year = document.getElementById('select-year').value;
+            const semester = document.getElementById('select-semester').value;
+            const key = `${year}_${semester}`;
+
+            if (!seatLayouts[key]) {
+                // Initialize default empty layout
+                seatLayouts[key] = Array.from({ length: 52 }, (_, i) => ({
+                    seatNumber: i + 1,
+                    student: null,
+                    isFixed: false,
+                    isSelected: false,
+                    isPillar: i === 21
+                }));
+            }
+
+            renderSeatingGrid(seatLayouts[key]);
+            updateStatsAndAlerts();
+        }
+
+        // Get student info from masterStudents by studentId
+        function getStudent(studentId) {
+            return masterStudents.find(s => s.studentId === studentId);
+        }
+
+        // Seat Grid Renderer
+        function renderSeatingGrid(seats) {
+            const container = document.getElementById('seating-grid');
+            container.innerHTML = '';
+
+            // Generate seats matching WPF grid coordinates (7 main rows + 2 gray rows)
+            const positions = [
+                // Row 0
+                { seatNum: 1, r: 1, c: 1 }, { seatNum: 2, r: 1, c: 2 }, { seatNum: 3, r: 1, c: 3 }, { aisle: true }, { seatNum: 4, r: 1, c: 5 }, { seatNum: 5, r: 1, c: 6 }, { seatNum: 6, r: 1, c: 7 },
+                // Row 1
+                { seatNum: 7, r: 2, c: 1 }, { seatNum: 8, r: 2, c: 2 }, { seatNum: 9, r: 2, c: 3 }, { aisle: true }, { seatNum: 10, r: 2, c: 5 }, { seatNum: 11, r: 2, c: 6 }, { seatNum: 12, r: 2, c: 7 },
+                // Row 2
+                { seatNum: 13, r: 3, c: 1 }, { seatNum: 14, r: 3, c: 2 }, { seatNum: 15, r: 3, c: 3 }, { aisle: true }, { seatNum: 16, r: 3, c: 5 }, { seatNum: 17, r: 3, c: 6 }, { seatNum: 18, r: 3, c: 7 },
+                // Row 3
+                { seatNum: 19, r: 4, c: 1 }, { seatNum: 20, r: 4, c: 2 }, { seatNum: 21, r: 4, c: 3 }, { aisle: true }, { seatNum: 22, r: 4, c: 5 }, { seatNum: 23, r: 4, c: 6 }, { pillar: true, r: 4, c: 7 },
+                // Row 4
+                { seatNum: 24, r: 5, c: 1 }, { seatNum: 25, r: 5, c: 2 }, { seatNum: 26, r: 5, c: 3 }, { aisle: true }, { seatNum: 27, r: 5, c: 5 }, { seatNum: 28, r: 5, c: 6 },
+                // Row 5
+                { seatNum: 29, r: 6, c: 1 }, { seatNum: 30, r: 6, c: 2 }, { seatNum: 31, r: 6, c: 3 }, { aisle: true }, { seatNum: 32, r: 6, c: 5 }, { seatNum: 33, r: 6, c: 6 }, { seatNum: 34, r: 6, c: 7 }, { seatNum: 35, r: 6, c: 8 },
+                // Row 6
+                { seatNum: 36, r: 7, c: 1 }, { seatNum: 37, r: 7, c: 2 }, { seatNum: 38, r: 7, c: 3 }, { aisle: true }, { seatNum: 39, r: 7, c: 5 }, { seatNum: 40, r: 7, c: 6 }, { seatNum: 41, r: 7, c: 7 }, { seatNum: 42, r: 7, c: 8 },
+                // Row 7 (Gray Zone)
+                { seatNum: 43, r: 8, c: 1, gray: true }, { seatNum: 44, r: 8, c: 2, gray: true }, { aisle: true }, { seatNum: 45, r: 8, c: 5, gray: true }, { seatNum: 46, r: 8, c: 6, gray: true }, { seatNum: 47, r: 8, c: 7, gray: true },
+                // Row 8 (Gray Zone)
+                { seatNum: 48, r: 9, c: 1, gray: true }, { seatNum: 49, r: 9, c: 2, gray: true }, { aisle: true }, { seatNum: 50, r: 9, c: 5, gray: true }, { seatNum: 51, r: 9, c: 6, gray: true }, { seatNum: 52, r: 9, c: 7, gray: true }
+            ];
+
+            positions.forEach(pos => {
+                if (pos.aisle) {
+                    const el = document.createElement('div');
+                    el.className = 'aisle';
+                    container.appendChild(el);
+                    return;
+                }
+
+                if (pos.pillar) {
+                    const el = document.createElement('div');
+                    el.className = 'seat-item pillar';
+                    el.innerHTML = '기둥';
+                    container.appendChild(el);
+                    return;
+                }
+
+                const seat = seats.find(s => s.seatNumber === pos.seatNum);
+                if (!seat) return;
+
+                const student = seat.studentId ? getStudent(seat.studentId) : null;
+                const el = document.createElement('div');
+                el.className = `seat-item ${student ? 'occupied' : ''} ${seat.isFixed ? 'fixed' : ''} ${pos.gray ? 'gray-zone' : ''}`;
+
+                // Content inside seat card
+                el.innerHTML = `
+                    <div class="seat-header">
+                        <span>${seat.seatNumber}</span>
+                        ${seat.isFixed ? '<span class="seat-fixed-icon">📌</span>' : ''}
+                    </div>
+                    ${student ? `
+                        <div class="seat-student-name">${student.name}</div>
+                        <div class="seat-student-id">${student.studentId}</div>
+                    ` : ''}
+                `;
+
+                // Handle clicks depending on current mode
+                el.onclick = () => handleSeatClick(seat);
+                container.appendChild(el);
+            });
+        }
+
+        function handleSeatClick(seat) {
+            const year = document.getElementById('select-year').value;
+            const semester = document.getElementById('select-semester').value;
+            const key = `${year}_${semester}`;
+
+            if (currentMode === 'delete') {
+                seat.student = null;
+                seat.isFixed = false;
+                loadSeats();
+            } else if (currentMode === 'fix') {
+                seat.isFixed = !seat.isFixed;
+                loadSeats();
+            } else {
+                // Open Seat Edit Dialog
+                openSeatModal(seat);
+            }
+        }
+
+        // --- Modals Controller ---
+        function openModal(modalId) {
+            document.getElementById(modalId).style.display = 'flex';
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+        }
+
+        function openSeatModal(seat) {
+            const year = document.getElementById('select-year').value;
+            const semester = document.getElementById('select-semester').value;
+            const key = `${year}_${semester}`;
+
+            const index = seatLayouts[key].findIndex(s => s.seatNumber === seat.seatNumber);
+            currentEditingSeatIndex = index;
+
+            document.getElementById('modal-seat-num').value = seat.seatNumber;
+            document.getElementById('modal-seat-fixed').checked = seat.isFixed;
+
+            // Student select option populate
+            const selectEl = document.getElementById('modal-student-select');
+            selectEl.innerHTML = '<option value="">선택 안 함 (공석)</option>';
+            masterStudents.forEach(s => {
+                selectEl.innerHTML += `<option value="${s.studentId}" ${seat.studentId === s.studentId ? 'selected' : ''}>${s.name} (${s.studentId})</option>`;
+            });
+
+            document.getElementById('btn-modal-clear').style.display = seat.studentId ? 'inline-block' : 'none';
+            openModal('seat-modal');
+        }
+
+        function saveSeatModal() {
+            const year = document.getElementById('select-year').value;
+            const semester = document.getElementById('select-semester').value;
+            const key = `${year}_${semester}`;
+
+            const selectedStudentId = document.getElementById('modal-student-select').value;
+            const isFixed = document.getElementById('modal-seat-fixed').checked;
+
+            const seat = seatLayouts[key][currentEditingSeatIndex];
+            seat.isFixed = isFixed;
+            seat.studentId = selectedStudentId || null;
+
+            closeModal('seat-modal');
+            loadSeats();
+        }
+
+        function clearSeatFromModal() {
+            const year = document.getElementById('select-year').value;
+            const semester = document.getElementById('select-semester').value;
+            const key = `${year}_${semester}`;
+
+            const seat = seatLayouts[key][currentEditingSeatIndex];
+            const seatNum = seat.seatNumber;
+            seat.studentId = null;
+
+            // 대학원생 좌석(43-52)이 아닌 경우에만 고정 해제
+            if (seatNum < 43 || seatNum > 52) {
+                seat.isFixed = false;
+            }
+
+            closeModal('seat-modal');
+            loadSeats();
+        }
+
+        // --- Memo Management ---
+        function renderMemos() {
+            const container = document.getElementById('memo-list');
+            container.innerHTML = '';
+
+            memos.forEach(memo => {
+                const card = document.createElement('div');
+                card.className = 'memo-card';
+                card.id = `memo-${memo.id}`;
+
+                if (currentEditingMemoId === memo.id) {
+                    // Edit mode
+                    card.innerHTML = `
+                        <input type="text" class="memo-edit-input" id="memo-input-${memo.id}" value="${memo.content}" autofocus>
+                        <div class="memo-actions" style="display: flex;">
+                            <button class="action-icon-btn" onclick="completeMemoEdit(${memo.id})">✓</button>
+                            <button class="action-icon-btn" onclick="cancelMemoEdit()">✕</button>
+                        </div>
+                    `;
+                } else {
+                    // View mode
+                    card.innerHTML = `
+                        <div class="memo-content">${memo.content}</div>
+                        <div class="memo-actions">
+                            <button class="action-icon-btn" onclick="startMemoEdit(${memo.id})">✏️</button>
+                            <button class="action-icon-btn" onclick="deleteMemo(${memo.id})">🗑️</button>
+                        </div>
+                    `;
+                }
+                container.appendChild(card);
+            });
+        }
+
+        function openMemoModal() {
+            currentEditingMemoId = null;
+            document.getElementById('modal-memo-content').value = '';
+            document.getElementById('memo-modal-title').innerText = '메모 추가';
+            openModal('memo-modal');
+        }
+
+        function startMemoEdit(id) {
+            currentEditingMemoId = id;
+            renderMemos();
+            setTimeout(() => {
+                document.getElementById(`memo-input-${id}`).focus();
+            }, 0);
+        }
+
+        function completeMemoEdit(id) {
+            const input = document.getElementById(`memo-input-${id}`);
+            const content = input.value.trim();
+
+            if (!content) {
+                alert('메모 내용을 입력해주세요.');
+                return;
+            }
+
+            const memo = memos.find(m => m.id === id);
+            if (memo) {
+                memo.content = content;
+            }
+
+            currentEditingMemoId = null;
+            renderMemos();
+        }
+
+        function cancelMemoEdit() {
+            currentEditingMemoId = null;
+            renderMemos();
+        }
+
+        function saveMemoModal() {
+            const content = document.getElementById('modal-memo-content').value.trim();
+            if (!content) return;
+
+            if (currentEditingMemoId) {
+                const memo = memos.find(m => m.id === currentEditingMemoId);
+                if (memo) memo.content = content;
+            } else {
+                memos.push({
+                    id: Date.now(),
+                    content: content
+                });
+            }
+
+            closeModal('memo-modal');
+            renderMemos();
+        }
+
+        function deleteMemo(id) {
+            if (confirm('이 메모를 삭제하시겠습니까?')) {
+                memos = memos.filter(m => m.id !== id);
+                if (currentEditingMemoId === id) {
+                    currentEditingMemoId = null;
+                }
+                renderMemos();
+            }
+        }
+
+        // --- Equipment Management ---
+        function renderRentals() {
+            const tbody = document.getElementById('rentals-table-body');
+            tbody.innerHTML = '';
+
+            activeRentals.forEach(rental => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td style="font-weight: 600;">${rental.studentName}</td>
+                    <td>${rental.equipmentType}</td>
+                    <td>${rental.rentalDate}</td>
+                    <td>${rental.dueDate}</td>
+                    <td>
+                        <span class="status-badge ${rental.isReturned ? 'success' : rental.isOverdue ? 'danger' : 'warning'}">
+                            ${rental.isReturned ? '반납 완료' : rental.isOverdue ? '연체됨' : '대여중'}
+                        </span>
+                    </td>
+                    <td>
+                        ${!rental.isReturned ? `<button class="btn-success" onclick="returnRental(${rental.id})">반납 처리</button>` : '<span style="color: var(--text-muted); font-size: 11px;">완료됨</span>'}
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+
+            document.getElementById('equipment-rented-count').innerText = `${activeRentals.filter(r => !r.isReturned).length}개`;
+            updateStatsAndAlerts();
+        }
+
+        function openRentalModal() {
+            const selectEl = document.getElementById('modal-rental-student');
+            selectEl.innerHTML = '';
+            masterStudents.forEach(s => {
+                selectEl.innerHTML += `<option value="${s.name}">${s.name} (${s.studentId})</option>`;
+            });
+            document.getElementById('modal-rental-device').value = '';
+            openModal('rental-modal');
+        }
+
+        function saveRentalModal() {
+            const studentName = document.getElementById('modal-rental-student').value;
+            const device = document.getElementById('modal-rental-device').value.trim();
+            const days = parseInt(document.getElementById('modal-rental-days').value) || 7;
+
+            if (!device) return;
+
+            const today = new Date();
+            const due = new Date();
+            due.setDate(today.getDate() + days);
+
+            const formatDate = (d) => d.toISOString().split('T')[0];
+
+            activeRentals.push({
+                id: Date.now(),
+                studentName: studentName,
+                equipmentType: device,
+                rentalDate: formatDate(today),
+                dueDate: formatDate(due),
+                isReturned: false,
+                isOverdue: false
+            });
+
+            closeModal('rental-modal');
+            renderRentals();
+        }
+
+        function returnRental(id) {
+            const rental = activeRentals.find(r => r.id === id);
+            if (rental) {
+                rental.isReturned = true;
+                rental.isOverdue = false;
+            }
+            renderRentals();
+        }
+
+        // --- Cabinet Approvals ---
+        function renderCabinetApprovals() {
+            const tbody = document.getElementById('cabinet-approvals-body');
+            tbody.innerHTML = '';
+
+            const list = approvals.filter(a => a.tabType === '캐비닛' && a.status === '승인 대기');
+
+            if (list.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">대기 중인 승인 요청이 없습니다.</td></tr>';
+                return;
+            }
+
+            list.forEach(req => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td style="font-weight: 600;">${req.studentName}</td>
+                    <td>${req.studentId}</td>
+                    <td>${req.department}</td>
+                    <td class="approval-actions">
+                        <button class="btn-success" onclick="approveRequest(${req.id})">승인</button>
+                        <button class="btn-danger" onclick="rejectRequest(${req.id})">반려</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        // --- SangsangLab Approvals ---
+        function renderSangsangLab() {
+            const container = document.getElementById('sangsang-cards-container');
+            container.innerHTML = '';
+
+            const list = approvals.filter(a => a.tabType === '상상Lab' && a.status === '승인 대기');
+
+            if (list.length === 0) {
+                container.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 40px 0;">대기 중인 상상Lab 승인 요청이 없습니다.</div>';
+                return;
+            }
+
+            list.forEach(req => {
+                const card = document.createElement('div');
+                card.className = 'approval-card';
+                card.innerHTML = `
+                    <div class="approval-header">
+                        <span class="approval-name">${req.studentName}</span>
+                        <span class="status-badge warning">승인 대기</span>
+                    </div>
+                    <div class="approval-details">
+                        학번: ${req.studentId}<br>
+                        학과: ${req.department}<br>
+                        지도교수: ${req.advisor}
+                    </div>
+                    <div class="approval-actions">
+                        <button class="btn-success" style="flex: 1;" onclick="approveRequest(${req.id})">승인</button>
+                        <button class="btn-danger" style="flex: 1;" onclick="rejectRequest(${req.id})">반려</button>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function approveRequest(id) {
+            const req = approvals.find(a => a.id === id);
+            if (req) {
+                req.status = '승인 완료';
+
+                // If it is SangsangLab approval, let's put them on the seating grid if there is space!
+                if (req.tabType === '상상Lab') {
+                    const year = document.getElementById('select-year').value;
+                    const semester = document.getElementById('select-semester').value;
+                    const key = `${year}_${semester}`;
+
+                    // Check if student already exists in masterStudents
+                    let student = getStudent(req.studentId);
+                    if (!student) {
+                        // Add new student to masterStudents
+                        student = {
+                            studentId: req.studentId,
+                            name: req.studentName,
+                            department: req.department,
+                            advisor: req.advisor,
+                            email: `${req.studentName}@dsu.ac.kr`,
+                            attendance: ["출석", "출석", "출석"],
+                            isNew: true
+                        };
+                        masterStudents.push(student);
+                    }
+
+                    const emptySeat = seatLayouts[key].find(s => !s.studentId && !s.isPillar && s.seatNumber < 43);
+                    if (emptySeat) {
+                        emptySeat.studentId = req.studentId;
+                    }
+                }
+            }
+            updateStatsAndAlerts();
+            renderCabinetApprovals();
+            renderSangsangLab();
+            loadSeats();
+        }
+
+        function rejectRequest(id) {
+            const req = approvals.find(a => a.id === id);
+            if (req) {
+                req.status = '반려';
+            }
+            updateStatsAndAlerts();
+            renderCabinetApprovals();
+            renderSangsangLab();
+        }
+
+        // --- Master Student Database ---
+        let currentEditingStudentId = null;
+
+        function renderMasterStudents(list = masterStudents) {
+            const tbody = document.getElementById('master-students-body');
+            tbody.innerHTML = '';
+
+            list.forEach(student => {
+                const attBadges = student.attendance.map(status => {
+                    return `<span class="status-badge ${status === '출석' ? 'success' : status === '지각' ? 'warning' : 'danger'}" style="margin-right: 4px; padding: 2px 6px; font-size: 10px;">${status}</span>`;
+                }).join('');
+
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td style="font-family: monospace;">${student.studentId}</td>
+                    <td style="font-weight: 600;">${student.name}</td>
+                    <td>${student.department}</td>
+                    <td>${student.advisor}</td>
+                    <td>${student.email}</td>
+                    <td>${attBadges}</td>
+                    <td>
+                        <button class="btn-primary" style="padding: 4px 8px; font-size: 11px;" onclick="openStudentEditModal('${student.studentId}')">수정</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function filterMasterStudents() {
+            const query = document.getElementById('search-student').value.toLowerCase().trim();
+            if (!query) {
+                renderMasterStudents();
+                return;
+            }
+
+            const filtered = masterStudents.filter(s => s.name.toLowerCase().includes(query) || s.studentId.includes(query));
+            renderMasterStudents(filtered);
+        }
+
+        function openStudentEditModal(studentId) {
+            const student = getStudent(studentId);
+            if (!student) return;
+
+            currentEditingStudentId = studentId;
+            document.getElementById('edit-student-id').value = student.studentId;
+            document.getElementById('edit-student-name').value = student.name;
+            document.getElementById('edit-student-department').value = student.department;
+            document.getElementById('edit-student-advisor').value = student.advisor;
+            document.getElementById('edit-student-email').value = student.email;
+            openModal('student-edit-modal');
+        }
+
+        function saveStudentEdit() {
+            const student = getStudent(currentEditingStudentId);
+            if (!student) return;
+
+            student.name = document.getElementById('edit-student-name').value.trim();
+            student.department = document.getElementById('edit-student-department').value.trim();
+            student.advisor = document.getElementById('edit-student-advisor').value.trim();
+            student.email = document.getElementById('edit-student-email').value.trim();
+
+            closeModal('student-edit-modal');
+            renderMasterStudents();
+            loadSeats(); // 대시보드 즉시 업데이트
+            updateStatsAndAlerts();
+        }
+
+        function syncDataFromForm() {
+            // 구글폼 데이터 동기화 시뮬레이션
+            if (!confirm('구글폼에서 데이터를 다시 불러오시겠습니까?')) return;
+
+            // Mock: 새로운 학생 데이터 추가 시뮬레이션
+            const newStudents = [
+                { studentId: "20250101", name: "한정빈", department: "컴퓨터공학과", advisor: "김동욱 교수", email: "student8@dsu.ac.kr", attendance: ["출석", "출석", "출석"], isNew: true },
+                { studentId: "20250102", name: "이우진", department: "소프트웨어융합학과", advisor: "이지현 교수", email: "student9@dsu.ac.kr", attendance: ["출석", "출석", "출석"], isNew: true }
+            ];
+
+            // 기존 학생과 중복되지 않은 새 학생만 추가
+            newStudents.forEach(newStudent => {
+                if (!getStudent(newStudent.studentId)) {
+                    masterStudents.push(newStudent);
+                }
+            });
+
+            alert(`데이터 동기화 완료! (${newStudents.length}명의 새로운 학생 추가)`);
+            renderMasterStudents();
+        }
+
+        // --- Real-time Alerts Badge Handler ---
+        function updateStatsAndAlerts() {
+            // Count pending approvals
+            const sangsanglabCount = approvals.filter(a => a.tabType === '상상Lab' && a.status === '승인 대기').length;
+            const cabinetCount = approvals.filter(a => a.tabType === '캐비닛' && a.status === '승인 대기').length;
+            const overdueRentalsCount = activeRentals.filter(r => !r.isReturned && r.isOverdue).length;
+
+            document.getElementById('alert-sangsanglab-count').innerText = `${sangsanglabCount}건`;
+            document.getElementById('alert-cabinet-count').innerText = `${cabinetCount}건`;
+            document.getElementById('alert-rental-count').innerText = `${overdueRentalsCount}건`;
+
+            // Active occupied seats count
+            const year = document.getElementById('select-year').value;
+            const semester = document.getElementById('select-semester').value;
+            const key = `${year}_${semester}`;
+
+            if (seatLayouts[key]) {
+                const occupiedCount = seatLayouts[key].filter(s => s.studentId && !s.isPillar).length;
+                document.getElementById('stats-occupied-seats').innerText = `${occupiedCount} / 51`;
+            }
+
+            document.getElementById('stats-active-rentals').innerText = `${activeRentals.filter(r => !r.isReturned).length}개`;
+        }
+
+        // --- Initialization ---
+        window.onload = () => {
+            loadSeats();
+            renderMemos();
+            updateStatsAndAlerts();
+        };
+
+    </script>
+</body>
+</html>

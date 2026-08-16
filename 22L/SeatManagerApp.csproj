@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
-    <DefaultItemExcludes>$(DefaultItemExcludes);SpinnerApp\**;Spinner.cs;22L\**</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);SpinnerApp\**;Spinner.cs</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>
