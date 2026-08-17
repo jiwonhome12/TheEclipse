@@ -56,6 +56,7 @@ namespace SeatManagerApp
         // App Modes
         private bool _isSeatFixMode = false;
         private bool _isSeatDeleteMode = false;
+        private bool _isCabinetFixed = false;
 
         // Current simulated date
         private DateTime _currentSimulatedDate;
@@ -1973,12 +1974,64 @@ namespace SeatManagerApp
 
         private void BtnCabinetFix_Click(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show("캐비닛 데이터 고정 기능 구현용 이벤트 핸들러입니다.", "캐비닛 고정", MessageBoxButton.OK, MessageBoxImage.Information);
+            _isCabinetFixed = !_isCabinetFixed;
+            if (_isCabinetFixed)
+            {
+                BtnCabinetFix.Content = "🔓 캐비닛 고정 해제";
+                BtnCabinetFix.Background = new SolidColorBrush(Color.FromRgb(254, 240, 138)); // Yellow indicator
+                MessageBox.Show("캐비닛 배정 현황이 고정되었습니다. 고정 해제 전까지는 배정 변경, 이동 및 신규 배정이 불가능합니다.", "캐비닛 고정 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            else
+            {
+                BtnCabinetFix.Content = "캐비닛 데이터 고정";
+                BtnCabinetFix.Background = Brushes.White;
+                MessageBox.Show("캐비닛 배정 현황 고정이 해제되었습니다.", "캐비닛 고정 해제", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
         }
 
         private void BtnCabinetExport_Click(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show("캐비닛 데이터 추출 기능 구현용 이벤트 핸들러입니다.", "캐비닛 추출", MessageBoxButton.OK, MessageBoxImage.Information);
+            if (_cabinetAllocations.Count == 0)
+            {
+                MessageBox.Show("추출할 캐비닛 배정 데이터가 없습니다.", "알림", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var dialog = new Microsoft.Win32.SaveFileDialog
+            {
+                Filter = "Excel Files (*.xlsx)|*.xlsx",
+                Title = "캐비닛 배정 현황 엑셀 추출",
+                FileName = $"캐비닛_배정현황_{_currentSimulatedDate:yyyyMMdd}.xlsx"
+            };
+
+            if (dialog.ShowDialog() == true)
+            {
+                try
+                {
+                    var exportData = new List<Dictionary<string, object>>();
+                    foreach (var kvp in _cabinetAllocations.OrderBy(x => x.Key))
+                    {
+                        var dict = new Dictionary<string, object>
+                        {
+                            { "캐비닛번호", kvp.Key },
+                            { "학번", kvp.Value.Student?.StudentId ?? "" },
+                            { "이름", kvp.Value.Student?.Name ?? "" },
+                            { "소속", kvp.Value.Student?.Department ?? "" },
+                            { "지도교수", kvp.Value.Student?.Advisor ?? "" },
+                            { "이메일", kvp.Value.Student?.Email ?? "" },
+                            { "대여기간", kvp.Value.Period }
+                        };
+                        exportData.Add(dict);
+                    }
+
+                    MiniExcelLibs.MiniExcel.SaveAs(dialog.FileName, exportData);
+                    MessageBox.Show("캐비닛 배정 데이터가 성공적으로 엑셀 파일로 추출되었습니다.", "추출 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"파일 저장 중 오류가 발생했습니다: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
         }
 
         private void BtnViewSangsangLabDetails_Click(object sender, RoutedEventArgs e)
@@ -2173,11 +2226,26 @@ namespace SeatManagerApp
                     TxtCabinetModalPeriod.Text = alloc.Period;
                     
                     SetCabinetModalEditMode(false);
-                    BtnMoveCabinet.Visibility = Visibility.Visible;
+                    if (_isCabinetFixed)
+                    {
+                        BtnEditCabinetInfo.Visibility = Visibility.Collapsed;
+                        BtnMoveCabinet.Visibility = Visibility.Collapsed;
+                    }
+                    else
+                    {
+                        BtnEditCabinetInfo.Visibility = Visibility.Visible;
+                        BtnMoveCabinet.Visibility = Visibility.Visible;
+                    }
                     ModalCabinetDetails.Visibility = Visibility.Visible;
                 }
                 else
                 {
+                    if (_isCabinetFixed)
+                    {
+                        MessageBox.Show("캐비닛 데이터 고정 상태입니다. 고정 해제 전까지는 신규 배정이 불가능합니다.", "알림", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+                    
                     var result = MessageBox.Show($"[캐비닛 {number}번] 사용 가능 (미배정) 상태입니다.\n이 캐비닛에 새로운 학생을 임의 배정하시겠습니까?", "캐비닛 배정", MessageBoxButton.YesNo, MessageBoxImage.Question);
                     if (result == MessageBoxResult.Yes)
                     {
@@ -2228,7 +2296,7 @@ namespace SeatManagerApp
                 TxtCabinetModalPeriod.Background = Brushes.Transparent; TxtCabinetModalPeriod.BorderThickness = new Thickness(0);
                 BtnSaveCabinetModal.Visibility = Visibility.Collapsed;
                 BtnSelectCabinetStudent.Visibility = Visibility.Collapsed;
-                if (_cabinetAllocations.ContainsKey(_currentEditingCabinetNum))
+                if (_cabinetAllocations.ContainsKey(_currentEditingCabinetNum) && !_isCabinetFixed)
                 {
                     BtnMoveCabinet.Visibility = Visibility.Visible;
                 }
@@ -2236,7 +2304,16 @@ namespace SeatManagerApp
                 {
                     BtnMoveCabinet.Visibility = Visibility.Collapsed;
                 }
-                BtnEditCabinetInfo.Content = "정보 수정";
+                
+                if (_isCabinetFixed)
+                {
+                    BtnEditCabinetInfo.Visibility = Visibility.Collapsed;
+                }
+                else
+                {
+                    BtnEditCabinetInfo.Visibility = Visibility.Visible;
+                    BtnEditCabinetInfo.Content = "정보 수정";
+                }
             }
         }
 
