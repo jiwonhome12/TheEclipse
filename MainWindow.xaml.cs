@@ -2129,6 +2129,17 @@ namespace SeatManagerApp
                 var alloc = _cabinetAllocations[number];
                 border.Background = new SolidColorBrush(Color.FromRgb(239, 246, 255));
 
+                var range = ParsePeriodDates(alloc.Period);
+                if (range != null)
+                {
+                    DateTime today = _currentSimulatedDate.Date;
+                    int daysRemaining = (range.Value.End.Date - today).Days;
+                    if (daysRemaining <= 7)
+                    {
+                        border.Background = new SolidColorBrush(Color.FromRgb(254, 226, 226)); // Soft red
+                    }
+                }
+
                 isMatch = alloc.Student.Name.ToLower().Contains(query) || 
                           alloc.Student.StudentId.ToLower().Contains(query) || 
                           alloc.Student.Department.ToLower().Contains(query);
