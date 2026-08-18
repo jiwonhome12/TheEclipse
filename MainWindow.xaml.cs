@@ -287,7 +287,7 @@ namespace SeatManagerApp
             // 탭을 열 때 기간이 지난 데이터가 있으면 정리할지 물어본다
             if (tabGrid == TabDashboard) CheckExpiredItems("대시보드");
             else if (tabGrid == TabEquipment) CheckExpiredItems("기자재");
-            else if (tabGrid == TabCabinet) CheckExpiredItems("캐비닛");
+            else if (tabGrid == TabCabinet) ShowCabinetExpiryWarningDialog();
         }
 
         private void BtnDashboard_Click(object sender, RoutedEventArgs e) => SwitchTab(BtnDashboard, TabDashboard, "대시보드");
@@ -3501,6 +3501,33 @@ namespace SeatManagerApp
             public Action Delete { get; set; } = () => { };
         }
 
+        private void ShowCabinetExpiryWarningDialog()
+        {
+            DateTime today = _currentSimulatedDate.Date;
+            var warningItems = new List<(int Number, StudentInfo Student, string Period, int DaysRemaining)>();
+
+            foreach (var kvp in _cabinetAllocations)
+            {
+                var range = ParsePeriodDates(kvp.Value.Period);
+                if (range == null) continue;
+
+                int daysRemaining = (range.Value.End.Date - today).Days;
+                if (daysRemaining <= 7)
+                {
+                    warningItems.Add((kvp.Key, kvp.Value.Student, kvp.Value.Period, daysRemaining));
+                }
+            }
+
+            if (warningItems.Count > 0)
+            {
+                var dialog = new CabinetExpiryWarningDialog(today, warningItems.OrderBy(x => x.DaysRemaining).ToList())
+                {
+                    Owner = this
+                };
+                dialog.ShowDialog();
+            }
+        }
+
         /// <summary>[유지]를 눌러 넘어간 항목. 같은 것으로 계속 묻지 않도록 세션 내내 기억한다.</summary>
         private readonly HashSet<string> _keptExpiredKeys = new HashSet<string>();
 
@@ -4392,6 +4419,120 @@ namespace SeatManagerApp
             {
                 MessageBox.Show("올바른 캐비닛 번호를 선택해 주세요.", "경고", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
+        }
+    }
+
+    public class CabinetExpiryWarningDialog : Window
+    {
+        public CabinetExpiryWarningDialog(DateTime today, List<(int Number, StudentInfo Student, string Period, int DaysRemaining)> items)
+        {
+            Title = "캐비닛 대여 기간 만료/임박 안내";
+            Width = 550;
+            SizeToContent = SizeToContent.Height;
+            MaxHeight = 600;
+            WindowStartupLocation = WindowStartupLocation.CenterOwner;
+            ResizeMode = ResizeMode.NoResize;
+
+            var root = new StackPanel { Margin = new Thickness(24) };
+
+            root.Children.Add(new TextBlock
+            {
+                Text = $"⚠️ 캐비닛 대여 기간 만료 및 임박 ({items.Count}건)",
+                FontSize = 16,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(Color.FromRgb(220, 38, 38)), // Red text
+                Margin = new Thickness(0, 0, 0, 6)
+            });
+
+            root.Children.Add(new TextBlock
+            {
+                Text = $"기준일: {today:yyyy-MM-dd}\n대여 기간이 만료되었거나 7일 이하로 남은 캐비닛 목록입니다.",
+                FontSize = 12,
+                Foreground = new SolidColorBrush(Color.FromRgb(107, 114, 128)),
+                Margin = new Thickness(0, 0, 0, 14)
+            });
+
+            var listBox = new ListBox
+            {
+                MaxHeight = 350,
+                BorderBrush = new SolidColorBrush(Color.FromRgb(229, 231, 235)),
+                BorderThickness = new Thickness(1),
+                Background = new SolidColorBrush(Color.FromRgb(249, 250, 251)),
+                Margin = new Thickness(0, 0, 0, 16),
+                HorizontalContentAlignment = HorizontalAlignment.Stretch
+            };
+
+            foreach (var item in items)
+            {
+                string statusStr = item.DaysRemaining < 0 
+                    ? $"만료 ({Math.Abs(item.DaysRemaining)}일 경과)" 
+                    : (item.DaysRemaining == 0 ? "오늘 만료 (D-Day)" : $"{item.DaysRemaining}일 남음");
+
+                Brush statusBrush = item.DaysRemaining < 0 
+                    ? new SolidColorBrush(Color.FromRgb(220, 38, 38)) // Red for expired
+                    : (item.DaysRemaining == 0 
+                        ? new SolidColorBrush(Color.FromRgb(217, 119, 6)) // Orange for D-Day
+                        : new SolidColorBrush(Color.FromRgb(37, 99, 235))); // Blue for <=7 days
+
+                var grid = new Grid { Margin = new Thickness(6, 4, 6, 4) };
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(80) }); // Cabinet No
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); // Student info
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(120) }); // Status/Days remaining
+
+                var numTxt = new TextBlock
+                {
+                    Text = $"{item.Number}번 캐비닛",
+                    FontWeight = FontWeights.Bold,
+                    Foreground = new SolidColorBrush(Color.FromRgb(55, 65, 81)),
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                Grid.SetColumn(numTxt, 0);
+                grid.Children.Add(numTxt);
+
+                var infoTxt = new TextBlock
+                {
+                    Text = $"{item.Student?.Name}({item.Student?.StudentId}) · {item.Period}",
+                    Foreground = new SolidColorBrush(Color.FromRgb(75, 85, 99)),
+                    VerticalAlignment = VerticalAlignment.Center,
+                    TextTrimming = TextTrimming.CharacterEllipsis
+                };
+                Grid.SetColumn(infoTxt, 1);
+                grid.Children.Add(infoTxt);
+
+                var statusTxt = new TextBlock
+                {
+                    Text = statusStr,
+                    FontWeight = FontWeights.Bold,
+                    Foreground = statusBrush,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                Grid.SetColumn(statusTxt, 2);
+                grid.Children.Add(statusTxt);
+
+                listBox.Items.Add(grid);
+            }
+
+            root.Children.Add(listBox);
+
+            var closeBtn = new Button
+            {
+                Content = "닫기",
+                Width = 100,
+                Height = 34,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                IsDefault = true,
+                IsCancel = true,
+                Background = new SolidColorBrush(Color.FromRgb(79, 70, 229)), // Indigo
+                Foreground = Brushes.White,
+                FontWeight = FontWeights.Bold,
+                BorderThickness = new Thickness(0),
+                Cursor = Cursors.Hand
+            };
+            closeBtn.Click += (s, e) => Close();
+            root.Children.Add(closeBtn);
+
+            Content = root;
         }
     }
 }
