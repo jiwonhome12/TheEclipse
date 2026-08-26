@@ -90,6 +90,7 @@ namespace SeatManagerApp
         public MainWindow()
         {
             _currentSimulatedDate = DateTime.Now;
+            RentalItem.SimulatedDate = _currentSimulatedDate;
             InitializeComponent();
 
             // Update date display
@@ -101,6 +102,7 @@ namespace SeatManagerApp
             timer.Tick += (s, e) =>
             {
                 _currentSimulatedDate = DateTime.Now;
+                RentalItem.SimulatedDate = _currentSimulatedDate;
                 UpdateDateDisplay();
                 UpdateAlertBadges();
             };
@@ -286,7 +288,11 @@ namespace SeatManagerApp
 
             // 탭을 열 때 기간이 지난 데이터가 있으면 정리할지 물어본다
             if (tabGrid == TabDashboard) CheckExpiredItems("대시보드");
-            else if (tabGrid == TabEquipment) CheckExpiredItems("기자재");
+            else if (tabGrid == TabEquipment)
+            {
+                CheckExpiredItems("기자재");
+                ShowEquipmentExpiryWarningDialog();
+            }
             else if (tabGrid == TabCabinet) ShowCabinetExpiryWarningDialog();
         }
 
@@ -1221,16 +1227,18 @@ namespace SeatManagerApp
                 string chosenEquipType = "";
                 string chosenPhone = req.Phone;
                 int chosenCabinetNum = -1;
+                EquipmentSelectionDialog? equipDialog = null;
                 if (req.TabType == "기자재")
                 {
                     var activeRentals = _rentals.Where(r => !r.IsReturned).ToList();
                     // 상태 관리(고장/수리/기타)에 올라가 있는 개체는 대여도 못 나가게 뺀다
-                    var dialog = new EquipmentSelectionDialog(activeRentals, req.Phone, req.EquipmentType, _equipmentIssues.ToList()) { Owner = this };
+                    var dialog = new EquipmentSelectionDialog(activeRentals, req.Phone, req.EquipmentType, _equipmentIssues.ToList(), req.DueDate, _currentSimulatedDate) { Owner = this };
                     if (dialog.ShowDialog() != true)
                     {
                         // Admin cancelled, abort the whole approval!
                         return;
                     }
+                    equipDialog = dialog;
                     chosenEquipType = $"{dialog.SelectedEquipmentType} ({dialog.SelectedUnitNumber})";
                     chosenPhone = dialog.SelectedPhone;
                 }
@@ -1315,21 +1323,16 @@ namespace SeatManagerApp
                 }
 
                 // If equipment request is approved, add to rentals list and history list
-                if (req.TabType == "기자재")
+                if (req.TabType == "기자재" && equipDialog != null)
                 {
-                    // 폼에 반납예정일이 있으면 그 날짜에 맞춘다 (없거나 과거면 기본 7일)
-                    int periodDays = 7;
-                    if (req.DueDate.HasValue)
-                    {
-                        int requested = (req.DueDate.Value.Date - _currentSimulatedDate.Date).Days;
-                        if (requested >= 1) periodDays = requested;
-                    }
+                    int periodDays = (equipDialog.SelectedDueDate.Date - equipDialog.SelectedRentalDate.Date).Days;
+                    if (periodDays <= 0) periodDays = 7;
 
                     var newRental = new RentalItem
                     {
                         StudentName = masterStudent.Name,
                         EquipmentType = chosenEquipType,
-                        RentalDate = _currentSimulatedDate,
+                        RentalDate = equipDialog.SelectedRentalDate,
                         RentalPeriodDays = periodDays,
                         IsReturned = false,
 
@@ -1844,6 +1847,15 @@ namespace SeatManagerApp
 
                     _importedSourceKeys.Add(req.SourceKey);
 
+                    if (req.TabType == "기자재")
+                    {
+                        if (req.SheetApprovalStatus == "승인" || req.SheetApprovalStatus == "승인 완료" || req.SheetApprovalStatus == "승인완료")
+                        {
+                            _approvals.Add(req);
+                        }
+                        continue;
+                    }
+
                     if (req.TabType == "캐비닛")
                     {
                         // 폼에 대여 기간 질문이 없으면 현재 선택된 학기의 기간으로 본다
@@ -1904,7 +1916,7 @@ namespace SeatManagerApp
                 {
                     MessageBox.Show(summary, "동기화 완료", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
-                else if (result.NewRequests.Count > 0)
+                else if (!silent && result.NewRequests.Count > 0)
                 {
                     MessageBox.Show(
                         $"구글폼으로 새 신청 {result.NewRequests.Count}건이 접수되었습니다.\n\n" +
@@ -3539,6 +3551,32 @@ namespace SeatManagerApp
             }
         }
 
+        private void ShowEquipmentExpiryWarningDialog()
+        {
+            DateTime today = _currentSimulatedDate.Date;
+            var warningItems = new List<(RentalItem Rental, int DaysRemaining)>();
+
+            foreach (var rental in _rentals)
+            {
+                if (rental.IsReturned) continue;
+
+                int daysRemaining = (rental.DueDate.Date - today).Days;
+                if (daysRemaining <= 7)
+                {
+                    warningItems.Add((rental, daysRemaining));
+                }
+            }
+
+            if (warningItems.Count > 0)
+            {
+                var dialog = new EquipmentExpiryWarningDialog(today, warningItems.OrderBy(x => x.DaysRemaining).ToList())
+                {
+                    Owner = this
+                };
+                dialog.ShowDialog();
+            }
+        }
+
         /// <summary>[유지]를 눌러 넘어간 항목. 같은 것으로 계속 묻지 않도록 세션 내내 기억한다.</summary>
         private readonly HashSet<string> _keptExpiredKeys = new HashSet<string>();
 
@@ -3885,6 +3923,8 @@ namespace SeatManagerApp
         private ComboBox _typeCombo;
         private ComboBox _numberCombo;
         private TextBox _phoneTextBox;
+        private DatePicker _rentalDatePicker;
+        private DatePicker _dueDatePicker;
         private Button _okButton;
         private Button _cancelButton;
         private List<RentalItem> _activeRentals;
@@ -3895,26 +3935,32 @@ namespace SeatManagerApp
         public string SelectedEquipmentType { get; private set; } = "";
         public string SelectedUnitNumber { get; private set; } = "";
         public string SelectedPhone { get; private set; } = "";
+        public DateTime SelectedRentalDate { get; private set; }
+        public DateTime SelectedDueDate { get; private set; }
 
-        public EquipmentSelectionDialog(List<RentalItem> activeRentals, string initialPhone, string requestedEquipmentType, List<EquipmentIssue>? issues = null)
+        public EquipmentSelectionDialog(List<RentalItem> activeRentals, string initialPhone, string requestedEquipmentType, List<EquipmentIssue>? issues = null, DateTime? initialDueDate = null, DateTime? initialRentalDate = null)
         {
             _activeRentals = activeRentals;
             _issues = issues ?? new List<EquipmentIssue>();
 
-            Title = "대여 기자재 및 번호 선택";
+            Title = "대여 기자재 및 기간 선택";
             Width = 350;
-            Height = 260;
+            Height = 350;
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
             ResizeMode = ResizeMode.NoResize;
 
             var mainGrid = new Grid { Margin = new Thickness(20) };
-            mainGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            mainGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(10) });
-            mainGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            mainGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(10) });
-            mainGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            mainGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(20) });
-            mainGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            mainGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // 0: Type
+            mainGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(10) }); // 1
+            mainGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // 2: Number
+            mainGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(10) }); // 3
+            mainGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // 4: Phone
+            mainGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(10) }); // 5
+            mainGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // 6: Rental Date
+            mainGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(10) }); // 7
+            mainGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // 8: Due Date
+            mainGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(20) }); // 9
+            mainGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // 10: Buttons
 
             // Row 0: Equipment Type Selection
             var typePanel = new StackPanel { Orientation = Orientation.Horizontal };
@@ -3957,14 +4003,35 @@ namespace SeatManagerApp
             Grid.SetRow(phonePanel, 4);
             mainGrid.Children.Add(phonePanel);
 
-            // Row 6: Buttons
+            // Row 6: Rental Date Picker
+            var calendarStyle = new Style(typeof(Calendar));
+            calendarStyle.Setters.Add(new Setter(Calendar.LayoutTransformProperty, new ScaleTransform(1.5, 1.5)));
+
+            var rentalDatePanel = new StackPanel { Orientation = Orientation.Horizontal };
+            rentalDatePanel.Children.Add(new TextBlock { Text = "대여 시작일:", Width = 100, VerticalAlignment = VerticalAlignment.Center, FontWeight = FontWeights.Bold });
+            _rentalDatePicker = new DatePicker { Width = 180, SelectedDate = initialRentalDate ?? DateTime.Today };
+            _rentalDatePicker.Resources.Add(typeof(Calendar), calendarStyle);
+            rentalDatePanel.Children.Add(_rentalDatePicker);
+            Grid.SetRow(rentalDatePanel, 6);
+            mainGrid.Children.Add(rentalDatePanel);
+
+            // Row 8: Due Date Picker
+            var dueDatePanel = new StackPanel { Orientation = Orientation.Horizontal };
+            dueDatePanel.Children.Add(new TextBlock { Text = "반납 예정일:", Width = 100, VerticalAlignment = VerticalAlignment.Center, FontWeight = FontWeights.Bold });
+            _dueDatePicker = new DatePicker { Width = 180, SelectedDate = initialDueDate ?? (initialRentalDate ?? DateTime.Today).AddDays(7) };
+            _dueDatePicker.Resources.Add(typeof(Calendar), calendarStyle);
+            dueDatePanel.Children.Add(_dueDatePicker);
+            Grid.SetRow(dueDatePanel, 8);
+            mainGrid.Children.Add(dueDatePanel);
+
+            // Row 10: Buttons
             var buttonPanel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
-            _okButton = new Button { Content = "승인 완료", Width = 80, Height = 30, Margin = new Thickness(0, 0, 10, 0), IsDefault = true, Background = new SolidColorBrush(Color.FromRgb(16, 185, 129)), Foreground = Brushes.White, FontWeight = FontWeights.Bold };
+            _okButton = new Button { Content = "대여 완료", Width = 80, Height = 30, Margin = new Thickness(0, 0, 10, 0), IsDefault = true, Background = new SolidColorBrush(Color.FromRgb(16, 185, 129)), Foreground = Brushes.White, FontWeight = FontWeights.Bold };
             _okButton.Click += OkButton_Click;
             _cancelButton = new Button { Content = "취소", Width = 80, Height = 30, IsCancel = true };
             buttonPanel.Children.Add(_okButton);
             buttonPanel.Children.Add(_cancelButton);
-            Grid.SetRow(buttonPanel, 6);
+            Grid.SetRow(buttonPanel, 10);
             mainGrid.Children.Add(buttonPanel);
 
             Content = mainGrid;
@@ -4041,6 +4108,8 @@ namespace SeatManagerApp
             }
             SelectedUnitNumber = numStr;
             SelectedPhone = _phoneTextBox.Text.Trim();
+            SelectedRentalDate = _rentalDatePicker.SelectedDate ?? DateTime.Today;
+            SelectedDueDate = _dueDatePicker.SelectedDate ?? DateTime.Today.AddDays(7);
             DialogResult = true;
             Close();
         }
@@ -4503,6 +4572,121 @@ namespace SeatManagerApp
                 var infoTxt = new TextBlock
                 {
                     Text = $"{item.Student?.Name}({item.Student?.StudentId}) · {item.Period}",
+                    Foreground = new SolidColorBrush(Color.FromRgb(75, 85, 99)),
+                    VerticalAlignment = VerticalAlignment.Center,
+                    TextTrimming = TextTrimming.CharacterEllipsis
+                };
+                Grid.SetColumn(infoTxt, 1);
+                grid.Children.Add(infoTxt);
+
+                var statusTxt = new TextBlock
+                {
+                    Text = statusStr,
+                    FontWeight = FontWeights.Bold,
+                    Foreground = statusBrush,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                Grid.SetColumn(statusTxt, 2);
+                grid.Children.Add(statusTxt);
+
+                listBox.Items.Add(grid);
+            }
+
+            root.Children.Add(listBox);
+
+            var closeBtn = new Button
+            {
+                Content = "닫기",
+                Width = 100,
+                Height = 34,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                IsDefault = true,
+                IsCancel = true,
+                Background = new SolidColorBrush(Color.FromRgb(79, 70, 229)), // Indigo
+                Foreground = Brushes.White,
+                FontWeight = FontWeights.Bold,
+                BorderThickness = new Thickness(0),
+                Cursor = Cursors.Hand
+            };
+            closeBtn.Click += (s, e) => Close();
+            root.Children.Add(closeBtn);
+
+            Content = root;
+        }
+    }
+
+    public class EquipmentExpiryWarningDialog : Window
+    {
+        public EquipmentExpiryWarningDialog(DateTime today, List<(RentalItem Rental, int DaysRemaining)> items)
+        {
+            Title = "기자재 대여 기간 만료/임박 안내";
+            Width = 550;
+            SizeToContent = SizeToContent.Height;
+            MaxHeight = 600;
+            WindowStartupLocation = WindowStartupLocation.CenterOwner;
+            ResizeMode = ResizeMode.NoResize;
+
+            var root = new StackPanel { Margin = new Thickness(24) };
+
+            root.Children.Add(new TextBlock
+            {
+                Text = $"⚠️ 기자재 대여 기간 만료 및 임박 ({items.Count}건)",
+                FontSize = 16,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(Color.FromRgb(220, 38, 38)), // Red text
+                Margin = new Thickness(0, 0, 0, 6)
+            });
+
+            root.Children.Add(new TextBlock
+            {
+                Text = $"기준일: {today:yyyy-MM-dd}\n대여 기간이 만료되었거나 7일 이하로 남은 기자재 목록입니다.",
+                FontSize = 12,
+                Foreground = new SolidColorBrush(Color.FromRgb(107, 114, 128)),
+                Margin = new Thickness(0, 0, 0, 14)
+            });
+
+            var listBox = new ListBox
+            {
+                MaxHeight = 350,
+                BorderBrush = new SolidColorBrush(Color.FromRgb(229, 231, 235)),
+                BorderThickness = new Thickness(1),
+                Background = new SolidColorBrush(Color.FromRgb(249, 250, 251)),
+                Margin = new Thickness(0, 0, 0, 16),
+                HorizontalContentAlignment = HorizontalAlignment.Stretch
+            };
+
+            foreach (var item in items)
+            {
+                string statusStr = item.DaysRemaining < 0 
+                    ? $"만료 ({Math.Abs(item.DaysRemaining)}일 경과)" 
+                    : (item.DaysRemaining == 0 ? "오늘 만료 (D-Day)" : $"{item.DaysRemaining}일 남음");
+
+                Brush statusBrush = item.DaysRemaining < 0 
+                    ? new SolidColorBrush(Color.FromRgb(220, 38, 38)) // Red for expired
+                    : (item.DaysRemaining == 0 
+                        ? new SolidColorBrush(Color.FromRgb(217, 119, 6)) // Orange for D-Day
+                        : new SolidColorBrush(Color.FromRgb(37, 99, 235))); // Blue for <=7 days
+
+                var grid = new Grid { Margin = new Thickness(6, 4, 6, 4) };
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(140) }); // Equipment type/No
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); // Student info
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(120) }); // Status/Days remaining
+
+                var numTxt = new TextBlock
+                {
+                    Text = $"{item.Rental.EquipmentType}",
+                    FontWeight = FontWeights.Bold,
+                    Foreground = new SolidColorBrush(Color.FromRgb(55, 65, 81)),
+                    VerticalAlignment = VerticalAlignment.Center,
+                    TextTrimming = TextTrimming.CharacterEllipsis
+                };
+                Grid.SetColumn(numTxt, 0);
+                grid.Children.Add(numTxt);
+
+                var infoTxt = new TextBlock
+                {
+                    Text = $"{item.Rental.StudentName}({item.Rental.StudentId}) · {item.Rental.RentalDate:yyyy-MM-dd} ~ {item.Rental.DueDate:yyyy-MM-dd}",
                     Foreground = new SolidColorBrush(Color.FromRgb(75, 85, 99)),
                     VerticalAlignment = VerticalAlignment.Center,
                     TextTrimming = TextTrimming.CharacterEllipsis

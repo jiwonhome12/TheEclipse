@@ -301,7 +301,8 @@ namespace SeatManagerApp
                         TabType = tabType.Length > 0 ? tabType : "미분류",
                         RequestDate = ParseTimestamp(rawTimestamp),
                         SourceKey = sourceKey,
-                        Status = "승인 대기"
+                        Status = "승인 대기",
+                        SheetApprovalStatus = map.ApprovalStatus >= 0 ? map.Get(row, map.ApprovalStatus) : string.Empty
                     });
                 }
             }
@@ -413,6 +414,7 @@ namespace SeatManagerApp
             public int Purpose { get; }
             public int DueDate { get; }
             public int RentalPeriod { get; }
+            public int ApprovalStatus { get; }
 
             public List<string> Missing { get; } = new List<string>();
 
@@ -441,6 +443,7 @@ namespace SeatManagerApp
                 Purpose = Find("사용목적", "목적");
                 DueDate = Find("반납예정일", "반납예정", "반납");
                 RentalPeriod = Find("대여기간", "신청기간", "사용기간", "기간");
+                ApprovalStatus = Find("승인상태", "승인여부", "승인", "상태");
 
                 // "원하는 공간" 질문의 보기 안에 '기자재'가 들어 있으면 같은 컬럼이 잡힌다 — 떼어낸다
                 if (Equipment >= 0 && Equipment == Space) Equipment = -1;

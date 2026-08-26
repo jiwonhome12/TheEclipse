@@ -1734,6 +1734,16 @@ namespace SeatManagerApp
                     }
 
                     _importedSourceKeys.Add(req.SourceKey);
+
+                    if (req.TabType == "기자재")
+                    {
+                        if (req.SheetApprovalStatus == "승인")
+                        {
+                            _approvals.Add(req);
+                        }
+                        continue;
+                    }
+
                     _approvals.Add(req);
                 }
 

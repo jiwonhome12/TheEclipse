@@ -523,16 +523,11 @@
                                     <DataGridTextColumn Header="반납예정일" Binding="{Binding DueDate, StringFormat=\{0:yyyy-MM-dd\}}" Width="90" IsReadOnly="True"/>
                                     <DataGridTextColumn Header="지도교수" Binding="{Binding Advisor}" Width="85" IsReadOnly="True"/>
                                     <DataGridTextColumn Header="상태" Binding="{Binding Status}" Width="65" IsReadOnly="True"/>
-                                    <DataGridTemplateColumn Header="승인 처리" Width="*" MinWidth="130">
+                                    <DataGridTemplateColumn Header="대여 처리" Width="*" MinWidth="80">
                                         <DataGridTemplateColumn.CellTemplate>
                                             <DataTemplate>
                                                 <StackPanel Orientation="Horizontal">
-                                                    <Button Content="승인" Background="#10B981" Foreground="White" BorderThickness="0" Padding="12,4" FontWeight="Bold" Margin="0,0,8,0" Click="BtnApproveRequest_Click" CommandParameter="{Binding}">
-                                                        <Button.Resources>
-                                                            <Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style>
-                                                        </Button.Resources>
-                                                    </Button>
-                                                    <Button Content="반려" Background="#EF4444" Foreground="White" BorderThickness="0" Padding="12,4" FontWeight="Bold" Click="BtnRejectRequest_Click" CommandParameter="{Binding}">
+                                                    <Button Content="대여" Background="#10B981" Foreground="White" BorderThickness="0" Padding="12,4" FontWeight="Bold" Margin="0" Click="BtnApproveRequest_Click" CommandParameter="{Binding}">
                                                         <Button.Resources>
                                                             <Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style>
                                                         </Button.Resources>

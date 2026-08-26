@@ -73,8 +73,9 @@ namespace SeatManagerApp
         public int RentalPeriodDays { get; set; } = 7; // Default 7 days rental
         public DateTime DueDate => RentalDate.AddDays(RentalPeriodDays);
         public bool IsReturned { get; set; } = false;
-        public bool IsOverdue => DueDate < new DateTime(2026, 7, 16);
-        public bool IsWarning => !IsReturned && !IsOverdue && (DueDate - new DateTime(2026, 7, 16)).TotalDays <= 7;
+        public static DateTime SimulatedDate { get; set; } = new DateTime(2026, 7, 16);
+        public bool IsOverdue => DueDate < SimulatedDate;
+        public bool IsWarning => !IsReturned && !IsOverdue && (DueDate - SimulatedDate).TotalDays <= 7;
         public string StatusDisplay => IsReturned ? "반납 완료" : (IsOverdue ? "연체됨" : (IsWarning ? "반납 임박" : "대여중"));
 
         // Columns requested in screenshot
@@ -91,6 +92,7 @@ namespace SeatManagerApp
         public DateTime? ReturnDate { get; set; } // 반납일
         public string DisplayDeptYear => $"{Department} / {YearLevel}";
         public string DisplayPhoneAdvisor => $"{Phone} / {Advisor}";
+        public string SourceKey { get; set; } = string.Empty; // 중복 동기화 방지용 키
 
         // ===== 개체 번호 표기 =====
 
@@ -184,6 +186,7 @@ namespace SeatManagerApp
         public DateTime RequestDate { get; set; } = DateTime.Now;
         public string Status { get; set; } = "승인 대기"; // "승인 대기", "승인 완료", "반려"
         public string RentalPeriod { get; set; } = string.Empty; // 대여 기간
+        public string SheetApprovalStatus { get; set; } = string.Empty; // 구글 시트 상의 승인 상태 ("승인" 등)
 
         // ===== 구글 폼 연동으로 채워지는 항목 =====
         public string Phone { get; set; } = string.Empty;    // 연락처
