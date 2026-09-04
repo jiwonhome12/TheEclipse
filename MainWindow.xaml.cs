@@ -30,9 +30,21 @@ namespace SeatManagerApp
         
         // Year & Semester Seat Layout Cache
         private Dictionary<string, List<Seat>> _seatLayoutCache = new Dictionary<string, List<Seat>>();
-        
+
         // Active display seats for current Year & Semester
         private List<Seat> _activeSeats = new List<Seat>();
+
+        // ===== 학사 시즌 일정 =====
+        private SeasonConfig _seasonConfig = new SeasonConfig();
+
+        /// <summary>현재 날짜로 자동 판별된 (연도, 시즌). 어느 시즌에도 들지 않으면 null.</summary>
+        private (int Year, string Season)? _currentSeason;
+
+        /// <summary>설정 화면 시즌 표(편집용 사본).</summary>
+        private ObservableCollection<SeasonPeriod> _seasonEditRows = new ObservableCollection<SeasonPeriod>();
+
+        /// <summary>대시보드 연도/학기 콤보를 코드에서 맞추는 중인지(재진입 방지).</summary>
+        private bool _syncingSeasonCombos = false;
 
         // Equipment Rentals
         private ObservableCollection<RentalItem> _rentals = new ObservableCollection<RentalItem>();
@@ -93,6 +105,12 @@ namespace SeatManagerApp
             RentalItem.SimulatedDate = _currentSimulatedDate;
             InitializeComponent();
 
+            // 학사 시즌 일정과 시즌별 좌석 데이터를 디스크에서 불러온다
+            _seasonConfig = SeasonConfig.Load();
+            SeedDefaultSeasonYearsIfEmpty();
+            LoadSeatCache();
+            this.Closing += MainWindow_Closing;
+
             // Update date display
             UpdateDateDisplay();
 
@@ -104,6 +122,8 @@ namespace SeatManagerApp
                 _currentSimulatedDate = DateTime.Now;
                 RentalItem.SimulatedDate = _currentSimulatedDate;
                 UpdateDateDisplay();
+                // 날짜가 바뀌면 현재 시즌을 다시 판별한다
+                DetectAndApplyCurrentSeason();
                 UpdateAlertBadges();
             };
             timer.Start();
@@ -119,8 +139,8 @@ namespace SeatManagerApp
             // Refresh UI Badges
             UpdateAlertBadges();
 
-            // Load initial view
-            LoadDashboardLayout();
+            // 현재 날짜가 포함되는 시즌을 자동으로 골라 대시보드에 반영한다
+            DetectAndApplyCurrentSeason(initial: true);
 
             // Set default resolution selection programmatically after initialization
             ComboResolution.SelectedIndex = 0;
@@ -283,6 +303,10 @@ namespace SeatManagerApp
                 GridMasterStudents.ItemsSource = null;
                 GridMasterStudents.ItemsSource = _masterStudents;
             }
+            else if (tabGrid == TabSettings)
+            {
+                LoadSeasonSettingsUI();
+            }
 
             UpdateAlertBadges();
 
@@ -347,10 +371,320 @@ namespace SeatManagerApp
                 }
 
                 _seatLayoutCache[key] = seats;
+                SaveSeatCache();
             }
 
             _activeSeats = _seatLayoutCache[key];
             RenderSeatGrid();
+            UpdateCurrentSeasonInfo();
+        }
+
+        // ================= 학사 시즌 일정 / 자동 판별 =================
+
+        /// <summary>시즌 일정이 하나도 없으면 지난해·올해·내년을 기본값으로 만들어 둔다.</summary>
+        private void SeedDefaultSeasonYearsIfEmpty()
+        {
+            if (_seasonConfig.Schedules.Count > 0) return;
+            int cy = _currentSimulatedDate.Year;
+            _seasonConfig.EnsureYear(cy - 1);
+            _seasonConfig.EnsureYear(cy);
+            _seasonConfig.EnsureYear(cy + 1);
+            _seasonConfig.Save();
+        }
+
+        private static string SeatCachePath =>
+            System.IO.Path.Combine(AppConfig.ConfigDirectory, "seats.json");
+
+        /// <summary>시즌별 좌석 데이터를 디스크에서 불러온다. 키는 "{연도}_{시즌}".</summary>
+        private void LoadSeatCache()
+        {
+            try
+            {
+                if (!System.IO.File.Exists(SeatCachePath)) return;
+                string json = System.IO.File.ReadAllText(SeatCachePath);
+                var data = System.Text.Json.JsonSerializer
+                    .Deserialize<Dictionary<string, List<Seat>>>(json);
+                if (data != null) _seatLayoutCache = data;
+            }
+            catch
+            {
+                // 손상된 파일이면 빈 캐시로 시작한다
+            }
+        }
+
+        /// <summary>시즌별 좌석 데이터를 디스크에 저장한다. 시즌마다 독립적으로 보관된다.</summary>
+        private void SaveSeatCache()
+        {
+            try
+            {
+                System.IO.Directory.CreateDirectory(AppConfig.ConfigDirectory);
+                string json = System.Text.Json.JsonSerializer.Serialize(
+                    _seatLayoutCache,
+                    new System.Text.Json.JsonSerializerOptions { WriteIndented = false });
+                System.IO.File.WriteAllText(SeatCachePath, json);
+            }
+            catch
+            {
+                // 저장 실패는 치명적이지 않다
+            }
+        }
+
+        private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
+        {
+            SaveSeatCache();
+            _seasonConfig.Save();
+        }
+
+        /// <summary>
+        /// 현재 날짜가 포함되는 시즌을 찾아 대시보드에 반영한다.
+        /// 시즌이 바뀌었을 때만(또는 <paramref name="initial"/>일 때) 대시보드 좌석 데이터를 다시 로드한다.
+        /// </summary>
+        private void DetectAndApplyCurrentSeason(bool initial = false)
+        {
+            var resolved = _seasonConfig.ResolveSeason(_currentSimulatedDate);
+
+            if (resolved == null)
+            {
+                // 어느 시즌에도 들지 않는다 — 콤보 선택은 그대로 두고 안내만 갱신한다
+                if (initial) LoadDashboardLayout();
+                else UpdateCurrentSeasonInfo();
+                return;
+            }
+
+            bool changed = _currentSeason == null || !_currentSeason.Value.Equals(resolved.Value);
+            if (initial || changed)
+            {
+                _currentSeason = resolved;
+                SyncDashboardCombosToSeason();
+                LoadDashboardLayout(); // 맞춰진 콤보를 읽어 해당 시즌 좌석 데이터를 띄운다
+            }
+        }
+
+        /// <summary>대시보드의 연도/학기 콤보를 자동 판별된 시즌에 맞춘다.</summary>
+        private void SyncDashboardCombosToSeason()
+        {
+            if (_currentSeason == null) return;
+
+            _syncingSeasonCombos = true;
+            try
+            {
+                string yearStr = _currentSeason.Value.Year.ToString();
+                if (!ComboSearchYear.Items.Cast<object>().Any(it => (it as string) == yearStr))
+                    ComboSearchYear.Items.Add(yearStr);
+                ComboSearchYear.SelectedItem = ComboSearchYear.Items.Cast<object>()
+                    .FirstOrDefault(it => (it as string) == yearStr);
+
+                foreach (var obj in ComboSearchSemester.Items)
+                {
+                    if (obj is ComboBoxItem cbi &&
+                        (cbi.Content?.ToString() ?? "") == _currentSeason.Value.Season)
+                    {
+                        ComboSearchSemester.SelectedItem = cbi;
+                        break;
+                    }
+                }
+            }
+            finally
+            {
+                _syncingSeasonCombos = false;
+            }
+        }
+
+        /// <summary>대시보드 배지와 설정 화면에 현재 시즌 정보를 표시한다.</summary>
+        private void UpdateCurrentSeasonInfo()
+        {
+            string dateStr = _currentSimulatedDate.ToString("yyyy-MM-dd");
+
+            if (TxtDashboardSeason != null)
+            {
+                TxtDashboardSeason.Text = _currentSeason != null
+                    ? $"현재 시즌: {_currentSeason.Value.Year}년 {_currentSeason.Value.Season} (자동)"
+                    : "현재 시즌: 설정된 시즌 없음";
+            }
+
+            if (TxtCurrentSeasonInfo != null)
+            {
+                TxtCurrentSeasonInfo.Text = _currentSeason != null
+                    ? $"현재 시즌: {_currentSeason.Value.Year}년 {_currentSeason.Value.Season}  ·  기준 날짜 {dateStr}"
+                    : $"오늘({dateStr})이 포함되는 시즌이 없습니다. 연도별 시작일·종료일을 확인해주세요.";
+            }
+        }
+
+        // ---- 설정 화면: 시즌 일정 편집 ----
+
+        private void LoadSeasonSettingsUI()
+        {
+            _syncingSeasonCombos = true;
+            try
+            {
+                ComboSeasonYear.Items.Clear();
+                var years = _seasonConfig.Years.ToList();
+                int cy = _currentSimulatedDate.Year;
+                if (!years.Contains(cy)) years.Add(cy);
+                years.Sort();
+                foreach (var y in years) ComboSeasonYear.Items.Add(y.ToString());
+
+                int target = _currentSeason?.Year ?? cy;
+                if (!years.Contains(target)) target = years.Count > 0 ? years[years.Count - 1] : cy;
+                ComboSeasonYear.SelectedItem = target.ToString();
+                ComboSeasonYear.Text = target.ToString();
+            }
+            finally
+            {
+                _syncingSeasonCombos = false;
+            }
+
+            LoadSeasonRowsForSelectedYear();
+            UpdateCurrentSeasonInfo();
+        }
+
+        /// <summary>편집 가능한 콤보에서 연도 숫자를 읽는다.</summary>
+        private int? SelectedSeasonYear()
+        {
+            string raw = (ComboSeasonYear.Text ?? string.Empty).Trim();
+            if (string.IsNullOrEmpty(raw)) raw = (ComboSeasonYear.SelectedItem as string) ?? string.Empty;
+            return int.TryParse(raw, out int y) ? y : (int?)null;
+        }
+
+        private void LoadSeasonRowsForSelectedYear()
+        {
+            _seasonEditRows = new ObservableCollection<SeasonPeriod>();
+
+            int? y = SelectedSeasonYear();
+            if (y != null)
+            {
+                var sched = _seasonConfig.GetYear(y.Value);
+                var seasons = sched != null
+                    ? SeasonConfig.NormalizeSeasons(y.Value, sched.Seasons)
+                    : SeasonConfig.DefaultSeasonsFor(y.Value);
+                foreach (var p in seasons) _seasonEditRows.Add(p.Clone());
+            }
+
+            GridSeasonSchedule.ItemsSource = _seasonEditRows;
+        }
+
+        private void ComboSeasonYear_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_syncingSeasonCombos) return;
+            LoadSeasonRowsForSelectedYear();
+        }
+
+        private void BtnAddSeasonYear_Click(object sender, RoutedEventArgs e)
+        {
+            int? y = SelectedSeasonYear();
+            if (y == null || y < 2000 || y > 2100)
+            {
+                MessageBox.Show("추가할 연도를 숫자로 입력하세요. 예: 2027", "연도 추가",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            bool existed = _seasonConfig.HasYear(y.Value);
+            if (!existed)
+            {
+                _seasonConfig.EnsureYear(y.Value); // 예시 기준 기본 일정으로 생성
+                _seasonConfig.Save();
+            }
+
+            // 콤보에 연도 반영(정렬 유지)
+            var items = ComboSeasonYear.Items.Cast<string>()
+                .Select(s => int.TryParse(s, out int v) ? v : 0)
+                .Where(v => v > 0).ToList();
+            if (!items.Contains(y.Value)) items.Add(y.Value);
+            items.Sort();
+
+            _syncingSeasonCombos = true;
+            try
+            {
+                ComboSeasonYear.Items.Clear();
+                foreach (var it in items) ComboSeasonYear.Items.Add(it.ToString());
+                ComboSeasonYear.SelectedItem = y.Value.ToString();
+                ComboSeasonYear.Text = y.Value.ToString();
+            }
+            finally
+            {
+                _syncingSeasonCombos = false;
+            }
+
+            LoadSeasonRowsForSelectedYear();
+            DetectAndApplyCurrentSeason(initial: true);
+
+            MessageBox.Show(
+                existed ? $"{y}년 시즌 일정을 불러왔습니다." : $"{y}년 시즌 일정을 기본값으로 추가했습니다.",
+                "연도 추가", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        private void BtnDeleteSeasonYear_Click(object sender, RoutedEventArgs e)
+        {
+            int? y = SelectedSeasonYear();
+            if (y == null || !_seasonConfig.HasYear(y.Value))
+            {
+                MessageBox.Show("삭제할 연도 일정이 없습니다.", "연도 삭제",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var r = MessageBox.Show(
+                $"{y}년 시즌 일정을 삭제하시겠습니까?\n(해당 시즌의 좌석 데이터 자체는 그대로 보관됩니다.)",
+                "연도 삭제", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if (r != MessageBoxResult.Yes) return;
+
+            _seasonConfig.RemoveYear(y.Value);
+            _seasonConfig.Save();
+
+            LoadSeasonSettingsUI();
+            DetectAndApplyCurrentSeason(initial: true);
+
+            MessageBox.Show($"{y}년 시즌 일정을 삭제했습니다.", "완료",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        private void BtnSaveSeasonSchedule_Click(object sender, RoutedEventArgs e)
+        {
+            int? y = SelectedSeasonYear();
+            if (y == null)
+            {
+                MessageBox.Show("연도를 먼저 선택하세요.", "저장 실패",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            GridSeasonSchedule.CommitEdit(DataGridEditingUnit.Cell, true);
+            GridSeasonSchedule.CommitEdit(DataGridEditingUnit.Row, true);
+
+            foreach (var p in _seasonEditRows)
+            {
+                if (p.EndDate.Date < p.StartDate.Date)
+                {
+                    MessageBox.Show($"[{p.Name}] 종료일이 시작일보다 빠릅니다.", "저장 실패",
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+            }
+
+            var ordered = _seasonEditRows.OrderBy(p => p.StartDate).ToList();
+            for (int i = 1; i < ordered.Count; i++)
+            {
+                if (ordered[i].StartDate.Date <= ordered[i - 1].EndDate.Date)
+                {
+                    var w = MessageBox.Show(
+                        "시즌 기간이 서로 겹칩니다. 그래도 저장하시겠습니까?\n" +
+                        "(겹치는 날짜는 먼저 시작하는 시즌으로 판별됩니다.)",
+                        "겹침 확인", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                    if (w != MessageBoxResult.Yes) return;
+                    break;
+                }
+            }
+
+            var sched = _seasonConfig.EnsureYear(y.Value);
+            sched.Seasons = SeasonConfig.NormalizeSeasons(y.Value, _seasonEditRows);
+            _seasonConfig.Save();
+
+            DetectAndApplyCurrentSeason(initial: true);
+            UpdateCurrentSeasonInfo();
+
+            MessageBox.Show($"{y}년 시즌 일정을 저장했습니다.", "완료",
+                MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         private void RenderSeatGrid()

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 
 namespace SeatManagerApp
@@ -53,8 +54,11 @@ namespace SeatManagerApp
         public bool IsPillar { get; set; }
 
         // Helper properties for UI binding
+        [JsonIgnore]
         public string DisplayId => Student != null ? Student.StudentId : string.Empty;
+        [JsonIgnore]
         public string DisplayName => Student != null ? Student.Name : string.Empty;
+        [JsonIgnore]
         public bool HasStudent => Student != null && !IsPillar;
     }
 

@@ -347,7 +347,7 @@
                                         <ComboBoxItem Content="겨울방학"/>
                                     </ComboBox>
 
-                                    <Button Content="🔍 조회" Background="#111827" Foreground="White" BorderThickness="0" 
+                                    <Button Content="🔍 조회" Background="#111827" Foreground="White" BorderThickness="0"
                                             FontWeight="Bold" Padding="15,6" Margin="20,0,0,0" Cursor="Hand" Click="BtnSearch_Click">
                                         <Button.Resources>
                                             <Style TargetType="Border">
@@ -355,6 +355,10 @@
                                             </Style>
                                         </Button.Resources>
                                     </Button>
+
+                                    <Border Background="#2563EB" CornerRadius="4" Padding="10,5" Margin="20,0,0,0" VerticalAlignment="Center">
+                                        <TextBlock x:Name="TxtDashboardSeason" Text="현재 시즌 판별 중" Foreground="White" FontWeight="Bold" FontSize="12" VerticalAlignment="Center"/>
+                                    </Border>
                                 </StackPanel>
                             </Border>
 
@@ -1238,6 +1242,50 @@
                                             </StackPanel>
 
                                             <TextBlock x:Name="TxtSyncStatus" Text="대기 중" FontSize="11" Foreground="#6B7280" TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- ===== 학사 시즌 일정 관리 ===== -->
+                                    <TextBlock Text="학사 시즌 일정 관리" FontSize="14" FontWeight="Bold" Foreground="#374151" Margin="0,15,0,10"/>
+                                    <Border Background="#EFF6FF" BorderBrush="#BFDBFE" BorderThickness="1" CornerRadius="6" Padding="15" Margin="0,0,0,15">
+                                        <StackPanel>
+                                            <TextBlock Text="연도별로 1학기 / 여름방학 / 2학기 / 겨울방학의 시작일과 종료일을 지정합니다. 현재 날짜가 포함되는 시즌이 대시보드에 자동으로 표시됩니다."
+                                                       FontSize="11" Foreground="#6B7280" TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,10" VerticalAlignment="Center">
+                                                <TextBlock Text="연도" FontWeight="Bold" Foreground="#374151" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                                <ComboBox x:Name="ComboSeasonYear" Width="110" Padding="5" IsEditable="True" VerticalContentAlignment="Center"
+                                                          SelectionChanged="ComboSeasonYear_SelectionChanged"/>
+                                                <Button x:Name="BtnAddSeasonYear" Content="＋ 연도 추가" Padding="12,6" Margin="10,0,0,0" Style="{StaticResource ActionBarBtn}" Click="BtnAddSeasonYear_Click"/>
+                                                <Button x:Name="BtnDeleteSeasonYear" Content="🗑 연도 삭제" Padding="12,6" Margin="8,0,0,0" Style="{StaticResource ActionBarBtn}" Click="BtnDeleteSeasonYear_Click"/>
+                                            </StackPanel>
+
+                                            <DataGrid x:Name="GridSeasonSchedule" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                                                      HeadersVisibility="Column" GridLinesVisibility="Horizontal" RowHeight="40" BorderBrush="#D1D5DB" BorderThickness="1"
+                                                      Background="White" Margin="0,0,0,10">
+                                                <DataGrid.Columns>
+                                                    <DataGridTextColumn Header="시즌" Binding="{Binding Name}" Width="120" IsReadOnly="True"/>
+                                                    <DataGridTemplateColumn Header="시작일" Width="180">
+                                                        <DataGridTemplateColumn.CellTemplate>
+                                                            <DataTemplate>
+                                                                <DatePicker SelectedDate="{Binding StartDate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" BorderThickness="0" VerticalContentAlignment="Center"/>
+                                                            </DataTemplate>
+                                                        </DataGridTemplateColumn.CellTemplate>
+                                                    </DataGridTemplateColumn>
+                                                    <DataGridTemplateColumn Header="종료일" Width="180">
+                                                        <DataGridTemplateColumn.CellTemplate>
+                                                            <DataTemplate>
+                                                                <DatePicker SelectedDate="{Binding EndDate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" BorderThickness="0" VerticalContentAlignment="Center"/>
+                                                            </DataTemplate>
+                                                        </DataGridTemplateColumn.CellTemplate>
+                                                    </DataGridTemplateColumn>
+                                                </DataGrid.Columns>
+                                            </DataGrid>
+
+                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                                <Button x:Name="BtnSaveSeasonSchedule" Content="💾 시즌 일정 저장" Padding="15,8" Style="{StaticResource ActionBarBtn}" Click="BtnSaveSeasonSchedule_Click"/>
+                                            </StackPanel>
+                                            <TextBlock x:Name="TxtCurrentSeasonInfo" Text="현재 시즌: (판별 전)" FontSize="12" FontWeight="Bold" Foreground="#1D4ED8" TextWrapping="Wrap"/>
                                         </StackPanel>
                                     </Border>
 
