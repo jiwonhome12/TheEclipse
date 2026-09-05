@@ -1,5 +1,5 @@
 #define MyAppName "동서대학교 좌석 및 기자재 관리 시스템"
-#define MyAppVersion "1.0.1"
+#define MyAppVersion "1.1.0"
 #define MyAppPublisher "SeatManagerApp"
 #define MyAppExeName "SeatManagerApp.exe"
 

@@ -19,6 +19,14 @@ namespace SeatManagerApp
         public string StudentId { get; set; } = string.Empty;   // 학번
         public string Email { get; set; } = string.Empty;       // 이메일
         public string CabinetPeriod { get; set; } = string.Empty; // 대여 기간
+
+        /// <summary>
+        /// 이 학생이 마지막으로 활동한 시즌 키("{연도}_{시즌}", 예: "2026_2학기").
+        /// 신청 승인·엑셀 등록·좌석 배정 시점의 시즌으로 갱신되며,
+        /// 데이터 관리 탭은 기본적으로 이번 시즌 학생만 걸러 보여준다(학생 정보 자체는 지워지지 않는다).
+        /// </summary>
+        public string LastActiveSeason { get; set; } = string.Empty;
+
         public List<AttendanceRecord> Attendance { get; set; } = new List<AttendanceRecord>();
 
         public StudentInfo Clone()
@@ -31,6 +39,7 @@ namespace SeatManagerApp
                 StudentId = this.StudentId,
                 Email = this.Email,
                 CabinetPeriod = this.CabinetPeriod,
+                LastActiveSeason = this.LastActiveSeason,
                 Attendance = new List<AttendanceRecord>()
             };
             foreach (var att in this.Attendance)

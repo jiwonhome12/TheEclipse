@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -68,7 +68,12 @@ namespace SeatManagerApp
         // App Modes
         private bool _isSeatFixMode = false;
         private bool _isSeatDeleteMode = false;
+        private bool _isSeatEditMode = false;
         private bool _isCabinetFixed = false;
+
+        /// <summary>좌석 수정 모드에서 드래그를 시작할 수도 있는 좌석(마우스를 누른 시점의 좌석).</summary>
+        private Seat? _seatDragCandidate;
+        private Point _seatDragStartPoint;
 
         /// <summary>대시보드 좌석에서 학번 가운데 4자리와 이름 가운데 한 글자를 '*'로 가릴지 여부.</summary>
         private bool _maskSeatInfo = false;
@@ -149,6 +154,10 @@ namespace SeatManagerApp
             // 현재 날짜가 포함되는 시즌을 자동으로 골라 대시보드에 반영한다
             DetectAndApplyCurrentSeason(initial: true);
 
+            // 시즌이 정해진 뒤에 학생 목록을 정리한다 (시즌 표시가 없던 예전 데이터 보정 + 목록 갱신)
+            MigrateStudentsWithoutSeason();
+            RefreshMasterGrid();
+
             // Set default resolution selection programmatically after initialization
             ComboResolution.SelectedIndex = 0;
 
@@ -190,7 +199,7 @@ namespace SeatManagerApp
         /// </summary>
         private void InitializeDataBindings()
         {
-            GridMasterStudents.ItemsSource = _masterStudents;
+            RefreshMasterGrid();
             LstSangsangLabCards.ItemsSource = _approvals.Where(a => a.TabType == "상상Lab").ToList();
             GridCabinetApprovals.ItemsSource = _approvals.Where(a => a.TabType == "캐비닛").ToList();
             BindEquipmentRentals();
@@ -307,8 +316,7 @@ namespace SeatManagerApp
             }
             else if (tabGrid == TabDataManage)
             {
-                GridMasterStudents.ItemsSource = null;
-                GridMasterStudents.ItemsSource = _masterStudents;
+                RefreshMasterGrid();
             }
             else if (tabGrid == TabSettings)
             {
@@ -357,25 +365,9 @@ namespace SeatManagerApp
                 // 기둥(棟)은 좌석이 아니라 화면에 따로 그려지는 칸(SeatNum -1, RenderSeatGrid 참고)이다.
                 // 22번은 그 옆에 있는 정상 좌석이므로 여기서 IsPillar를 세우면 안 된다.
 
-                // Pre-populate students in all active seats using copies of master database
-                int studentIdx = 0;
-                for (int i = 0; i < seats.Count; i++)
-                {
-                    var seat = seats[i];
-                    if (seat.IsPillar) continue;
-
-                    if (studentIdx < _masterStudents.Count)
-                    {
-                        // Copy student (Deep copy) so deleting from dashboard won't affect master
-                        seat.Student = _masterStudents[studentIdx++].Clone();
-                        
-                        // Graduate student's seat is always fixed
-                        if (seat.Student != null && seat.Student.Department.Contains("대학원"))
-                        {
-                            seat.IsFixed = true;
-                        }
-                    }
-                }
+                // 처음 조회하는 시즌은 완전히 빈 상태(전부 빈 좌석)로 시작한다.
+                // 마스터 학생 목록에서 자동으로 채우면 다른 시즌 데이터가 그대로 옮겨온 것처럼 보이므로 채우지 않는다.
+                // 좌석에 학생을 앉히는 것은 관리자가 직접(좌석 클릭·랜덤 배정·엑셀 불러오기 등으로) 해야 한다.
 
                 _seatLayoutCache[key] = seats;
                 SaveSeatCache();
@@ -515,6 +507,7 @@ namespace SeatManagerApp
                 _currentSeason = resolved;
                 SyncDashboardCombosToSeason();
                 LoadDashboardLayout(); // 맞춰진 콤보를 읽어 해당 시즌 좌석 데이터를 띄운다
+                RefreshMasterGrid();   // 데이터 관리 목록도 새 시즌 기준으로 다시 거른다
             }
         }
 
@@ -923,29 +916,13 @@ namespace SeatManagerApp
                 // Outer Card Border
                 Border seatCard = new Border
                 {
-                    Background = pos.IsGray ? new SolidColorBrush(Color.FromRgb(209, 213, 219)) : Brushes.White,
                     BorderThickness = new Thickness(1.5),
                     Margin = new Thickness(3),
                     CornerRadius = new CornerRadius(4),
                     Cursor = Cursors.Hand,
                     Tag = seat
                 };
-
-                // Border Color styling depending on state
-                bool isFixed = seat.IsFixed || (seat.Student != null && seat.Student.Department.Contains("대학원"));
-                if (seat.IsSelected)
-                {
-                    seatCard.BorderBrush = Brushes.Yellow; // Select mode highlight
-                    seatCard.Background = new SolidColorBrush(Color.FromRgb(254, 249, 195)); // Soft yellow
-                }
-                else if (isFixed)
-                {
-                    seatCard.BorderBrush = new SolidColorBrush(Color.FromRgb(249, 115, 22)); // Orange border for fixed
-                }
-                else
-                {
-                    seatCard.BorderBrush = new SolidColorBrush(Color.FromRgb(229, 231, 235));
-                }
+                ApplySeatCardDefaultStyle(seatCard, seat, pos.IsGray);
 
                 // Grid inside Card
                 Grid cardGrid = new Grid();
@@ -963,6 +940,7 @@ namespace SeatManagerApp
                 };
                 topStack.Children.Add(numTxt);
 
+                bool isFixed = seat.IsFixed || (seat.Student != null && seat.Student.Department.Contains("대학원"));
                 if (isFixed)
                 {
                     TextBlock lockTxt = new TextBlock
@@ -1009,6 +987,13 @@ namespace SeatManagerApp
 
                 seatCard.Child = cardGrid;
                 seatCard.MouseDown += SeatCard_MouseDown;
+                seatCard.PreviewMouseLeftButtonDown += SeatCard_DragCandidate;
+                seatCard.PreviewMouseMove += SeatCard_DragMove;
+                seatCard.AllowDrop = true;
+                seatCard.DragEnter += SeatCard_DragEnter;
+                seatCard.DragOver += SeatCard_DragOver;
+                seatCard.DragLeave += SeatCard_DragLeave;
+                seatCard.Drop += SeatCard_Drop;
 
                 Grid.SetRow(seatCard, pos.Row);
                 Grid.SetColumn(seatCard, pos.Col);
@@ -1069,12 +1054,176 @@ namespace SeatManagerApp
                     bool anySelected = _activeSeats.Any(s => s.IsSelected);
                     BtnDeleteSelected.Visibility = anySelected ? Visibility.Visible : Visibility.Collapsed;
                 }
+                else if (_isSeatEditMode)
+                {
+                    // 좌석 수정 모드에서는 클릭 자체로는 아무것도 하지 않는다 — 드래그로만 자리를 옮긴다.
+                }
                 else
                 {
                     // Regular Mode: Show student details or add student
                     ShowStudentDetailsModal(seat);
                 }
             }
+        }
+
+        // ================= 좌석 수정 모드 (드래그 앤 드롭으로 자리 이동/교체) =================
+        private void BtnSeatEditMode_Click(object sender, RoutedEventArgs e)
+        {
+            if (_isSeatFixMode)
+            {
+                _isSeatFixMode = false;
+                BtnSeatFixMode.Content = "좌석 고정 모드";
+                BtnSeatFixMode.Background = Brushes.White;
+                foreach (var s in _activeSeats) s.IsSelected = false;
+            }
+            if (_isSeatDeleteMode)
+            {
+                _isSeatDeleteMode = false;
+                BtnDeleteSelected.Visibility = Visibility.Collapsed;
+                BtnSeatDeleteMode.Content = "좌석 데이터 삭제";
+            }
+
+            _isSeatEditMode = !_isSeatEditMode;
+            BtnSeatEditMode.Content = _isSeatEditMode ? "✅ 좌석 수정 종료" : "🔀 좌석 수정 모드";
+            BtnSeatEditMode.Background = _isSeatEditMode
+                ? new SolidColorBrush(Color.FromRgb(191, 219, 254)) // 하늘색으로 활성 표시
+                : Brushes.White;
+
+            _seatDragCandidate = null;
+            RenderSeatGrid();
+        }
+
+        /// <summary>좌석 카드를 누른 시점 — 학생이 있는 좌석이면 드래그 시작 후보로 기록해 둔다.</summary>
+        /// <summary>좌석 카드의 기본 배경/테두리를 seat 상태(선택·고정·회색줄)에 맞춰 다시 계산해 적용한다.</summary>
+        private static void ApplySeatCardDefaultStyle(Border seatCard, Seat seat, bool isGray)
+        {
+            bool isFixed = seat.IsFixed || (seat.Student != null && seat.Student.Department.Contains("대학원"));
+
+            seatCard.Background = isGray ? new SolidColorBrush(Color.FromRgb(209, 213, 219)) : Brushes.White;
+
+            if (seat.IsSelected)
+            {
+                seatCard.BorderBrush = Brushes.Yellow; // Select mode highlight
+                seatCard.Background = new SolidColorBrush(Color.FromRgb(254, 249, 195)); // Soft yellow
+            }
+            else if (isFixed)
+            {
+                seatCard.BorderBrush = new SolidColorBrush(Color.FromRgb(249, 115, 22)); // Orange border for fixed
+            }
+            else
+            {
+                seatCard.BorderBrush = new SolidColorBrush(Color.FromRgb(229, 231, 235));
+            }
+            seatCard.BorderThickness = new Thickness(1.5);
+        }
+
+        private void SeatCard_DragCandidate(object sender, MouseButtonEventArgs e)
+        {
+            if (!_isSeatEditMode) return;
+            if (sender is Border border && border.Tag is Seat seat && seat.Student != null && !seat.IsPillar)
+            {
+                _seatDragCandidate = seat;
+                _seatDragStartPoint = e.GetPosition(null);
+            }
+        }
+
+        /// <summary>누른 채로 일정 거리 이상 움직이면 실제 드래그를 시작한다. 드래그 중엔 원래 좌석을 흐리게 표시해 "지금 옮기고 있다"는 걸 보여준다.</summary>
+        private void SeatCard_DragMove(object sender, MouseEventArgs e)
+        {
+            if (!_isSeatEditMode || _seatDragCandidate == null) return;
+            if (e.LeftButton != MouseButtonState.Pressed) { _seatDragCandidate = null; return; }
+            if (sender is not Border border) return;
+
+            Point pos = e.GetPosition(null);
+            if (Math.Abs(pos.X - _seatDragStartPoint.X) < SystemParameters.MinimumHorizontalDragDistance &&
+                Math.Abs(pos.Y - _seatDragStartPoint.Y) < SystemParameters.MinimumVerticalDragDistance)
+                return;
+
+            var seat = _seatDragCandidate;
+            _seatDragCandidate = null; // 같은 드래그를 두 번 시작하지 않도록
+
+            border.Opacity = 0.3; // 지금 들고 있는 좌석은 흐리게
+            border.Cursor = Cursors.Hand;
+            try
+            {
+                DragDrop.DoDragDrop(border, seat, DragDropEffects.Move);
+            }
+            finally
+            {
+                // 드롭 성공 시 RenderSeatGrid가 새 카드를 만들지만, 취소되거나 실패한 경우를 위해 원상 복구한다.
+                border.Opacity = 1.0;
+                ApplySeatCardDefaultStyle(border, seat, seat.SeatNumber >= 43);
+            }
+        }
+
+        /// <summary>드래그가 이 좌석 위로 들어오면 놓을 수 있는 자리인지 표시한다.</summary>
+        private void SeatCard_DragOver(object sender, DragEventArgs e)
+        {
+            bool canDrop = _isSeatEditMode && e.Data.GetDataPresent(typeof(Seat)) &&
+                           sender is Border b && b.Tag is Seat s && !s.IsPillar &&
+                           !ReferenceEquals(e.Data.GetData(typeof(Seat)), s);
+            e.Effects = canDrop ? DragDropEffects.Move : DragDropEffects.None;
+            e.Handled = true;
+        }
+
+        /// <summary>마우스가 올라온 좌석 카드를 파란 테두리로 강조해서 "여기에 놓인다"를 분명히 보여준다.</summary>
+        private void SeatCard_DragEnter(object sender, DragEventArgs e)
+        {
+            if (!_isSeatEditMode || !e.Data.GetDataPresent(typeof(Seat))) return;
+            if (sender is Border border && border.Tag is Seat seat && !seat.IsPillar &&
+                !ReferenceEquals(e.Data.GetData(typeof(Seat)), seat))
+            {
+                border.BorderBrush = new SolidColorBrush(Color.FromRgb(37, 99, 235)); // 진한 파랑
+                border.BorderThickness = new Thickness(3);
+                border.Background = new SolidColorBrush(Color.FromRgb(219, 234, 254)); // 옅은 파랑
+            }
+        }
+
+        /// <summary>드래그가 이 좌석을 벗어나면 원래 모습으로 되돌린다.</summary>
+        private void SeatCard_DragLeave(object sender, DragEventArgs e)
+        {
+            if (sender is Border border && border.Tag is Seat seat)
+            {
+                ApplySeatCardDefaultStyle(border, seat, seat.SeatNumber >= 43);
+            }
+        }
+
+        /// <summary>다른 좌석 카드 위에 놓았을 때 — 자리를 옮기거나(빈 자리) 맞바꾼다(학생이 있는 자리).</summary>
+        private void SeatCard_Drop(object sender, DragEventArgs e)
+        {
+            if (!_isSeatEditMode) return;
+            if (!e.Data.GetDataPresent(typeof(Seat))) return;
+            if (sender is not Border border || border.Tag is not Seat targetSeat) return;
+            if (targetSeat.IsPillar) return;
+
+            var sourceSeat = (Seat)e.Data.GetData(typeof(Seat));
+            if (sourceSeat == targetSeat || sourceSeat.Student == null) return;
+
+            var moving = sourceSeat.Student;
+            var occupant = targetSeat.Student;
+
+            if (occupant != null)
+            {
+                string occName = string.IsNullOrWhiteSpace(occupant.Name) ? occupant.StudentId : occupant.Name;
+                string movingName = string.IsNullOrWhiteSpace(moving.Name) ? moving.StudentId : moving.Name;
+                var confirm = MessageBox.Show(
+                    $"{targetSeat.SeatNumber}번 좌석에는 {occName} 학생이 있습니다.\n" +
+                    $"{movingName} 학생과 자리를 맞바꿀까요?",
+                    "좌석 맞바꾸기", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                if (confirm != MessageBoxResult.Yes) return;
+            }
+
+            sourceSeat.Student = occupant;
+            sourceSeat.IsFixed = occupant != null && occupant.Department.Contains("대학원");
+
+            targetSeat.Student = moving;
+            targetSeat.IsFixed = moving.Department.Contains("대학원");
+
+            MarkStudentActiveThisSeason(moving);
+            MarkStudentActiveThisSeason(occupant);
+
+            RenderSeatGrid();
+            SaveSeatCache();
         }
 
         private void ShowStudentDetailsModal(Seat seat)
@@ -1177,6 +1326,12 @@ namespace SeatManagerApp
                 BtnDeleteSelected.Visibility = Visibility.Collapsed;
                 BtnSeatDeleteMode.Content = "좌석 데이터 삭제";
             }
+            if (_isSeatEditMode)
+            {
+                _isSeatEditMode = false;
+                BtnSeatEditMode.Content = "🔀 좌석 수정 모드";
+                BtnSeatEditMode.Background = Brushes.White;
+            }
 
             if (!_isSeatFixMode)
             {
@@ -1223,8 +1378,13 @@ namespace SeatManagerApp
 
             // Find existing students currently assigned to seats
             var currentStudentIds = _activeSeats.Where(s => s.Student != null).Select(s => s.Student.StudentId).ToHashSet();
-            // Find newly added students not in the active seats list
-            var newStudents = _masterStudents.Where(m => !currentStudentIds.Contains(m.StudentId)).ToList();
+
+            // 이번 시즌에 등록(활동)된 학생 중 아직 자리가 없는 학생만 배정 대상이다.
+            // (지난 시즌 학생까지 끌어오면 안 되므로 시즌으로 먼저 거른다)
+            string seasonKey = CurrentSeasonKey();
+            var newStudents = _masterStudents
+                .Where(m => m.LastActiveSeason == seasonKey && !currentStudentIds.Contains(m.StudentId))
+                .ToList();
 
             if (newStudents.Count > 0)
             {
@@ -1243,6 +1403,7 @@ namespace SeatManagerApp
 
                 for (int i = 0; i < shuffledNew.Count && i < targetSeats.Count; i++)
                 {
+                    shuffledNew[i].LastActiveSeason = seasonKey;
                     targetSeats[i].Student = shuffledNew[i].Clone();
                     
                     // Graduate student check for new assignments
@@ -1369,6 +1530,12 @@ namespace SeatManagerApp
                 _isSeatFixMode = false;
                 BtnSeatFixMode.Content = "좌석 고정 모드";
                 BtnSeatFixMode.Background = Brushes.White;
+            }
+            if (_isSeatEditMode)
+            {
+                _isSeatEditMode = false;
+                BtnSeatEditMode.Content = "🔀 좌석 수정 모드";
+                BtnSeatEditMode.Background = Brushes.White;
             }
 
             // Create context menu to choose between selection delete and all delete
@@ -1584,7 +1751,8 @@ namespace SeatManagerApp
                     Name = req.StudentName,
                     Department = req.Department,
                     Advisor = req.Advisor,
-                    Email = req.Email
+                    Email = req.Email,
+                    LastActiveSeason = CurrentSeasonKey()
                 };
                 created.Attendance.Add(new AttendanceRecord
                 {
@@ -1619,6 +1787,7 @@ namespace SeatManagerApp
             existing.Department = Prefer(req.Department, existing.Department);
             existing.Advisor = Prefer(req.Advisor, existing.Advisor);
             existing.Email = Prefer(req.Email, existing.Email);
+            existing.LastActiveSeason = CurrentSeasonKey(); // 재신청 — 이번 시즌 활동자로 올린다
             RefreshMasterGrid();
             return existing;
         }
@@ -1627,12 +1796,75 @@ namespace SeatManagerApp
         private static string Prefer(string incoming, string current) =>
             string.IsNullOrWhiteSpace(incoming) ? current : incoming;
 
-        /// <summary>_masterStudents는 List라 추가/수정해도 자동 갱신되지 않으므로 다시 바인딩한다.</summary>
+        /// <summary>
+        /// 지금 진행 중인 시즌 키("{연도}_{시즌}"). 자동 판별된 시즌을 우선 쓰고,
+        /// 판별이 안 되면 대시보드에서 조회 중인 연도/학기를 쓴다.
+        /// </summary>
+        private string CurrentSeasonKey()
+        {
+            if (_currentSeason != null)
+                return $"{_currentSeason.Value.Year}_{_currentSeason.Value.Season}";
+
+            string year = ComboSearchYear?.SelectedItem as string ?? _currentSimulatedDate.Year.ToString();
+            string semester = (ComboSearchSemester?.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "1학기";
+            return $"{year}_{semester}";
+        }
+
+        /// <summary>
+        /// 데이터 관리 탭의 학생 목록을 다시 그린다.
+        /// 기본은 이번 시즌에 활동한 학생만 보여주고, [지난 시즌까지 보기]를 켜면 전부 보여준다.
+        /// 검색어가 있으면 그 결과 안에서 다시 걸러낸다. (학생 정보 자체는 시즌이 바뀌어도 지워지지 않는다)
+        /// </summary>
         private void RefreshMasterGrid()
         {
             if (GridMasterStudents == null) return;
-            GridMasterStudents.ItemsSource = null;
-            GridMasterStudents.ItemsSource = _masterStudents;
+
+            IEnumerable<StudentInfo> view = _masterStudents;
+
+            if (ChkShowAllSeasonStudents?.IsChecked != true)
+            {
+                string season = CurrentSeasonKey();
+                view = view.Where(s => s.LastActiveSeason == season);
+            }
+
+            string query = (TxtSearchStudent?.Text ?? string.Empty).Trim().ToLower();
+            if (query.Length > 0)
+            {
+                view = view.Where(s =>
+                    s.StudentId.ToLower().Contains(query) ||
+                    s.Name.ToLower().Contains(query) ||
+                    s.Advisor.ToLower().Contains(query) ||
+                    s.Department.ToLower().Contains(query));
+            }
+
+            GridMasterStudents.ItemsSource = view.ToList();
+        }
+
+        /// <summary>
+        /// 시즌 표시가 비어 있는 학생(이 기능이 생기기 전에 등록된 데이터)을 지금 시즌 학생으로 본다.
+        /// 그대로 두면 시즌 필터에 하나도 안 걸려 목록이 통째로 비어 보인다.
+        /// </summary>
+        private void MigrateStudentsWithoutSeason()
+        {
+            string seasonKey = CurrentSeasonKey();
+            foreach (var st in _masterStudents)
+            {
+                if (string.IsNullOrWhiteSpace(st.LastActiveSeason))
+                    st.LastActiveSeason = seasonKey;
+            }
+        }
+
+        private void ChkShowAllSeasonStudents_Changed(object sender, RoutedEventArgs e)
+        {
+            RefreshMasterGrid();
+        }
+
+        /// <summary>학생을 이번 시즌 활동자로 표시한다(마스터 기준). 학번으로 마스터를 찾아 갱신한다.</summary>
+        private void MarkStudentActiveThisSeason(StudentInfo? student)
+        {
+            if (student == null || string.IsNullOrWhiteSpace(student.StudentId)) return;
+            var master = _masterStudents.FirstOrDefault(m => m.StudentId == student.StudentId);
+            if (master != null) master.LastActiveSeason = CurrentSeasonKey();
         }
 
         // ================= CABINET & SANGSANGLAB APPROVAL HANDLERS =================
@@ -1640,9 +1872,19 @@ namespace SeatManagerApp
         {
             if (sender is Button btn && btn.CommandParameter is ApprovalRequest req)
             {
-                // 마스터 반영을 먼저 한다 — 학번 충돌로 관리자가 취소하면 승인 자체를 중단해야 하므로
-                var masterStudent = RegisterOrUpdateMaster(req);
-                if (masterStudent == null) return;
+                StudentInfo? masterStudent;
+                if (req.TabType == "기자재")
+                {
+                    // 기자재 대여는 일회성 처리라 데이터 관리(학생 마스터)에 등록/수정하지 않는다.
+                    // 이미 마스터에 있는 학생이면 이름 등 표시용 정보만 읽어오고, 마스터 자체는 건드리지 않는다.
+                    masterStudent = _masterStudents.FirstOrDefault(m => m.StudentId == req.StudentId);
+                }
+                else
+                {
+                    // 마스터 반영을 먼저 한다 — 학번 충돌로 관리자가 취소하면 승인 자체를 중단해야 하므로
+                    masterStudent = RegisterOrUpdateMaster(req);
+                    if (masterStudent == null) return;
+                }
 
                 string chosenEquipType = "";
                 string chosenPhone = req.Phone;
@@ -1664,17 +1906,21 @@ namespace SeatManagerApp
                 }
                 else if (req.TabType == "캐비닛")
                 {
+                    // 이 분기는 위에서 이미 null이 아님을 확인한 경우에만 온다 (기자재만 null 허용)
+                    var m = masterStudent!;
+
                     // Check if this student already has a cabinet
-                    var duplicateCabinetNum = _cabinetAllocations.FirstOrDefault(kvp => kvp.Value.Student?.StudentId == masterStudent.StudentId).Key;
+                    var duplicateCabinetNum = _cabinetAllocations.FirstOrDefault(kvp => kvp.Value.Student?.StudentId == m.StudentId).Key;
                     if (duplicateCabinetNum > 0)
                     {
                         string existingPeriod = _cabinetAllocations[duplicateCabinetNum].Period;
-                        string newPeriod = string.IsNullOrWhiteSpace(req.RentalPeriod) ? DefaultCabinetPeriod : req.RentalPeriod;
+                        // 대여 기간은 '승인을 누른 오늘'부터 이번 시즌 마지막 날까지로 잡는다
+                        string newPeriod = SeasonCabinetPeriod();
 
                         if (ArePeriodsOverlapping(existingPeriod, newPeriod))
                         {
                             MessageBox.Show(
-                                $"해당 학생({masterStudent.Name} / {masterStudent.StudentId})은 이미 {duplicateCabinetNum}번 캐비닛에 배정되어 있으며, " +
+                                $"해당 학생({m.Name} / {m.StudentId})은 이미 {duplicateCabinetNum}번 캐비닛에 배정되어 있으며, " +
                                 $"대여 기간({existingPeriod})이 신청 기간({newPeriod})과 중복됩니다.\n먼저 기존 배정을 해제한 후 승인해 주세요.",
                                 "배정 중복 오류", MessageBoxButton.OK, MessageBoxImage.Warning);
                             return;
@@ -1683,12 +1929,13 @@ namespace SeatManagerApp
                         // 기간이 겹치지 않으면 새 칸을 주는 대신 쓰던 칸의 기간을 늘려준다 (연장)
                         string mergedPeriod = MergePeriods(existingPeriod, newPeriod);
                         var confirm = MessageBox.Show(
-                            $"{masterStudent.Name} ({masterStudent.StudentId}) 학생은 {duplicateCabinetNum}번 캐비닛을 {existingPeriod} 기간으로 쓰고 있습니다.\n" +
+                            $"{m.Name} ({m.StudentId}) 학생은 {duplicateCabinetNum}번 캐비닛을 {existingPeriod} 기간으로 쓰고 있습니다.\n" +
                             $"신청 기간({newPeriod})이 겹치지 않으므로 {duplicateCabinetNum}번 캐비닛을 {mergedPeriod} 로 연장합니다.\n\n계속할까요?",
                             "대여 기간 연장", MessageBoxButton.YesNo, MessageBoxImage.Question);
                         if (confirm != MessageBoxResult.Yes) return;
 
-                        _cabinetAllocations[duplicateCabinetNum] = (masterStudent.Clone(), mergedPeriod);
+                        _cabinetAllocations[duplicateCabinetNum] = (m.Clone(), mergedPeriod);
+                        req.RentalPeriod = mergedPeriod; // 승인 내역에도 확정된 기간으로 남긴다
                         chosenCabinetNum = duplicateCabinetNum;
                     }
                     else
@@ -1714,10 +1961,12 @@ namespace SeatManagerApp
                 // 연장이면 위에서 이미 합친 기간으로 써 두었으므로 덮어쓰지 않는다.
                 if (req.TabType == "캐비닛" && chosenCabinetNum > 0 &&
                     (!_cabinetAllocations.TryGetValue(chosenCabinetNum, out var current) ||
-                     current.Student?.StudentId != masterStudent.StudentId))
+                     current.Student?.StudentId != masterStudent!.StudentId))
                 {
-                    string period = string.IsNullOrWhiteSpace(req.RentalPeriod) ? DefaultCabinetPeriod : req.RentalPeriod;
-                    _cabinetAllocations[chosenCabinetNum] = (masterStudent.Clone(), period);
+                    // 대여 기간 = 승인을 누른 오늘 ~ 이번 시즌 마지막 날
+                    string period = SeasonCabinetPeriod();
+                    req.RentalPeriod = period; // 승인 내역에도 실제 확정된 기간으로 남긴다
+                    _cabinetAllocations[chosenCabinetNum] = (masterStudent!.Clone(), period);
                 }
 
                 // If equipment request is approved, add to rentals list and history list
@@ -1728,7 +1977,7 @@ namespace SeatManagerApp
 
                     var newRental = new RentalItem
                     {
-                        StudentName = masterStudent.Name,
+                        StudentName = Prefer(masterStudent?.Name ?? string.Empty, req.StudentName),
                         EquipmentType = chosenEquipType,
                         RentalDate = equipDialog.SelectedRentalDate,
                         RentalPeriodDays = periodDays,
@@ -1899,8 +2148,7 @@ namespace SeatManagerApp
                     }
                 }
 
-                GridMasterStudents.ItemsSource = null;
-                GridMasterStudents.ItemsSource = _masterStudents;
+                RefreshMasterGrid();
                 RenderSeatGrid();
                 SaveAppState();
                 MessageBox.Show("마스터 데이터가 수정되었으며 즉시 대시보드에 데이터가 업데이트되었습니다.", "완료", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -1915,8 +2163,7 @@ namespace SeatManagerApp
                 if (result == MessageBoxResult.Yes)
                 {
                     _masterStudents.Remove(_selectedMasterStudent);
-                    GridMasterStudents.ItemsSource = null;
-                    GridMasterStudents.ItemsSource = _masterStudents;
+                    RefreshMasterGrid();
                     PanelMasterEdit.IsEnabled = false;
                     SaveAppState();
                     MessageBox.Show("마스터 데이터가 삭제되었습니다. (기존 배치된 좌석 데이터는 유지됩니다.)", "완료", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -2221,6 +2468,9 @@ namespace SeatManagerApp
                 // 중복으로 자동 반려된 신청. 폴링 한 번에 여러 건이 걸릴 수 있으므로 모아서 한 번만 알린다.
                 var autoRejected = new List<ApprovalRequest>();
 
+                // 기자재 시트에서 아직 승인 전이라 이번에도 건너뛴 건수 (신규로 잡히지만 앱에는 안 들어간다)
+                int equipmentPendingOnSheet = 0;
+
                 foreach (var req in result.NewRequests)
                 {
                     // 기자재 폼에는 이름 질문이 없다 — 같은 학번을 아는 곳에서 이름을 채워 넣는다.
@@ -2234,16 +2484,25 @@ namespace SeatManagerApp
                             ?? string.Empty;
                     }
 
-                    _importedSourceKeys.Add(req.SourceKey);
-
                     if (req.TabType == "기자재")
                     {
-                        if (req.SheetApprovalStatus == "승인" || req.SheetApprovalStatus == "승인 완료" || req.SheetApprovalStatus == "승인완료")
+                        if (IsApprovedOnSheet(req.SheetApprovalStatus))
                         {
+                            // 시트에서 승인됨을 확인했다 — 이제 앱이 넘겨받으므로 '처리 완료'로 기록해서
+                            // 다음 동기화부터는 (앱에서 승인/반려하든 상관없이) 다시 새 신청으로 들어오지 않게 한다.
+                            _importedSourceKeys.Add(req.SourceKey);
                             _approvals.Add(req);
+                        }
+                        else
+                        {
+                            // 아직 시트에서 승인 전이다 — SourceKey를 기록하지 않는다.
+                            // 그래야 다음 동기화 때 이 행을 다시 읽어서 승인상태가 바뀌었는지 재확인할 수 있다.
+                            equipmentPendingOnSheet++;
                         }
                         continue;
                     }
+
+                    _importedSourceKeys.Add(req.SourceKey);
 
                     if (req.TabType == "캐비닛")
                     {
@@ -2283,8 +2542,10 @@ namespace SeatManagerApp
                         "배정 중복 오류", MessageBoxButton.OK, MessageBoxImage.Warning);
                 }
 
-                string summary = $"[{DateTime.Now:HH:mm:ss}] 응답 {result.TotalRows}건 중 신규 {result.NewRequests.Count}건 반영";
+                int actuallyAdded = result.NewRequests.Count - equipmentPendingOnSheet;
+                string summary = $"[{DateTime.Now:HH:mm:ss}] 응답 {result.TotalRows}건 중 신규 {actuallyAdded}건 반영";
                 if (result.DuplicateCount > 0) summary += $" (기존 {result.DuplicateCount}건 건너뜀)";
+                if (equipmentPendingOnSheet > 0) summary += $" (기자재 시트 승인 대기 {equipmentPendingOnSheet}건 — 다음 동기화 때 재확인)";
 
                 // 현재 승인 대기 현황을 구분별로 보여준다
                 var byType = _approvals.GroupBy(a => a.TabType)
@@ -2859,21 +3120,8 @@ namespace SeatManagerApp
 
         private void PerformStudentSearch()
         {
-            string query = TxtSearchStudent.Text.Trim().ToLower();
-            if (string.IsNullOrEmpty(query))
-            {
-                GridMasterStudents.ItemsSource = _masterStudents;
-            }
-            else
-            {
-                var filtered = _masterStudents.Where(s => 
-                    s.StudentId.ToLower().Contains(query) ||
-                    s.Name.ToLower().Contains(query) ||
-                    s.Advisor.ToLower().Contains(query) ||
-                    s.Department.ToLower().Contains(query)
-                ).ToList();
-                GridMasterStudents.ItemsSource = filtered;
-            }
+            // 시즌 필터 + 검색어를 한곳에서 함께 적용한다
+            RefreshMasterGrid();
         }
 
         private void TxtSearchStudent_KeyUp(object sender, KeyEventArgs e)
@@ -2889,7 +3137,7 @@ namespace SeatManagerApp
         private void BtnClearStudentSearch_Click(object sender, RoutedEventArgs e)
         {
             TxtSearchStudent.Clear();
-            GridMasterStudents.ItemsSource = _masterStudents;
+            RefreshMasterGrid();
         }
 
         private void ComboResolution_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -3031,10 +3279,15 @@ namespace SeatManagerApp
 
                 if (master == null)
                 {
-                    _masterStudents.Add(st.Clone());
+                    var added = st.Clone();
+                    added.LastActiveSeason = CurrentSeasonKey();
+                    _masterStudents.Add(added);
                     addedToMaster++;
                     continue;
                 }
+
+                // 이번 시즌 좌석 명단으로 불러온 학생이므로 이번 시즌 활동자로 올린다
+                master.LastActiveSeason = CurrentSeasonKey();
 
                 // 이미 있으면 비어 있던 항목만 채워 넣는다 (기존 값은 덮어쓰지 않는다)
                 bool changed = false;
@@ -3047,8 +3300,7 @@ namespace SeatManagerApp
 
             if (addedToMaster > 0 || updatedInMaster > 0)
             {
-                GridMasterStudents.ItemsSource = null;
-                GridMasterStudents.ItemsSource = _masterStudents;
+                RefreshMasterGrid();
             }
 
             SaveAppState();
@@ -3471,15 +3723,15 @@ namespace SeatManagerApp
                                 Name = name,
                                 Department = dept,
                                 Advisor = advisor,
-                                Email = email
+                                Email = email,
+                                LastActiveSeason = CurrentSeasonKey()
                             };
                             _masterStudents.Add(student);
                             importedCount++;
                         }
                     }
 
-                    GridMasterStudents.ItemsSource = null;
-                    GridMasterStudents.ItemsSource = _masterStudents;
+                    RefreshMasterGrid();
                     SaveAppState();
                     MessageBox.Show($"엑셀 파일로부터 {importedCount}명의 마스터 학생 정보를 등록했습니다.", "가져오기 성공", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
@@ -3502,8 +3754,7 @@ namespace SeatManagerApp
             if (result == MessageBoxResult.Yes)
             {
                 _masterStudents.Clear();
-                GridMasterStudents.ItemsSource = null;
-                GridMasterStudents.ItemsSource = _masterStudents;
+                RefreshMasterGrid();
                 SaveAppState();
                 MessageBox.Show("모든 학생 정보가 삭제되었습니다.", "삭제 완료", MessageBoxButton.OK, MessageBoxImage.Information);
             }
@@ -3747,6 +3998,10 @@ namespace SeatManagerApp
 
                 targetSeat.Student = movingIn;
                 targetSeat.IsFixed = movingIn.Department.Contains("대학원");
+
+                // 이번 시즌 좌석에 앉혔으므로 마스터에서도 이번 시즌 활동자로 표시한다
+                MarkStudentActiveThisSeason(movingIn);
+                MarkStudentActiveThisSeason(occupant);
 
                 // Update UI fields in parent modal
                 TxtModalName.Text = movingIn.Name;
@@ -4016,11 +4271,47 @@ namespace SeatManagerApp
         private static string FormatPeriod(DateTime start, DateTime end) =>
             $"{start:yy.MM.dd} ~ {end:yy.MM.dd}";
 
-        /// <summary>선택된 학기의 기간. 학기를 아직 고르지 않았으면 오늘부터 한 달.</summary>
-        private string DefaultCabinetPeriod =>
-            string.IsNullOrEmpty(_activeCabinetPeriod)
-                ? FormatPeriod(_currentSimulatedDate, _currentSimulatedDate.AddMonths(1))
-                : _activeCabinetPeriod;
+        /// <summary>
+        /// 지금 진행 중인 시즌의 종료일 (설정 탭의 시즌 일정 기준).
+        /// 시즌이 판별되지 않거나 일정이 없으면 null.
+        /// </summary>
+        private DateTime? CurrentSeasonEndDate()
+        {
+            if (_currentSeason == null) return null;
+
+            var schedule = _seasonConfig.GetYear(_currentSeason.Value.Year);
+            var period = schedule?.Seasons.FirstOrDefault(p => p.Name == _currentSeason.Value.Season);
+            return period?.EndDate;
+        }
+
+        /// <summary>
+        /// 캐비닛 대여 기간 — 오늘(승인을 누른 날)부터 이번 시즌 마지막 날까지.
+        /// 시즌 일정이 없거나 이미 시즌이 끝난 날짜면 오늘부터 한 달로 둔다.
+        /// </summary>
+        private string SeasonCabinetPeriod()
+        {
+            DateTime? end = CurrentSeasonEndDate();
+            if (end == null || end.Value.Date < _currentSimulatedDate.Date)
+                return FormatPeriod(_currentSimulatedDate, _currentSimulatedDate.AddMonths(1));
+
+            return FormatPeriod(_currentSimulatedDate, end.Value);
+        }
+
+        /// <summary>
+        /// 기본 대여 기간. 설정 탭의 시즌 일정(오늘 ~ 시즌 종료일)을 우선 쓰고,
+        /// 시즌 일정이 없을 때만 학기 라디오 버튼으로 고른 기간을 쓴다.
+        /// </summary>
+        private string DefaultCabinetPeriod
+        {
+            get
+            {
+                if (CurrentSeasonEndDate() != null) return SeasonCabinetPeriod();
+
+                return string.IsNullOrEmpty(_activeCabinetPeriod)
+                    ? FormatPeriod(_currentSimulatedDate, _currentSimulatedDate.AddMonths(1))
+                    : _activeCabinetPeriod;
+            }
+        }
 
         /// <summary>
         /// 두 대여 기간이 겹치는지. 겹치지 않아야 같은 학생의 추가 신청을 '연장'으로 받아줄 수 있다.
@@ -4045,6 +4336,15 @@ namespace SeatManagerApp
         /// 캐비닛 신청이 같은 학생의 기존 배정·대기 신청과 기간이 겹치는지 본다.
         /// 겹치면 반려 사유를, 겹치지 않으면(= 연장으로 받아도 되면) 빈 문자열을 돌려준다.
         /// </summary>
+        /// <summary>기자재 시트의 승인상태 칸 값이 '승인됨'으로 볼 수 있는 값인지.</summary>
+        private static bool IsApprovedOnSheet(string sheetApprovalStatus)
+        {
+            string s = (sheetApprovalStatus ?? string.Empty).Trim();
+            return s == "승인" || s == "승인 완료" || s == "승인완료" || s == "승인함" ||
+                   s.Equals("O", StringComparison.OrdinalIgnoreCase) ||
+                   s.Equals("Y", StringComparison.OrdinalIgnoreCase);
+        }
+
         private string FindCabinetConflict(ApprovalRequest req)
         {
             var allocated = _cabinetAllocations

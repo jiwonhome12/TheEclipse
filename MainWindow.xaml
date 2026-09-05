@@ -367,6 +367,7 @@
                                 <Button Content="랜덤 배정" Style="{StaticResource ActionBarBtn}" Margin="0,0,8,0" Click="BtnRandomAllocation_Click"/>
                                 <Button x:Name="BtnSeatFixMode" Content="좌석 고정 모드" Style="{StaticResource ActionBarBtn}" Margin="0,0,8,0" Click="BtnSeatFixMode_Click"/>
                                 <Button x:Name="BtnSeatDeleteMode" Content="좌석 데이터 삭제" Style="{StaticResource ActionBarBtn}" Margin="0,0,8,0" Click="BtnSeatDeleteMode_Click"/>
+                                <Button x:Name="BtnSeatEditMode" Content="🔀 좌석 수정 모드" Style="{StaticResource ActionBarBtn}" Margin="0,0,8,0" Click="BtnSeatEditMode_Click"/>
                                 <Button x:Name="BtnLoadSeatData" Content="📥 좌석데이터 불러오기" Style="{StaticResource ActionBarBtn}" Margin="0,0,8,0" Click="BtnLoadSeatData_Click"/>
                                 <Button x:Name="BtnMaskSeatInfo" Content="🔒 정보 가리기" Style="{StaticResource ActionBarBtn}" Margin="0,0,8,0" Click="BtnMaskSeatInfo_Click"/>
                                 <Button x:Name="BtnImportDashboardExcel" Content="📤 엑셀 내보내기" Style="{StaticResource ActionBarBtn}" Click="BtnImportDashboardExcel_Click"/>
@@ -1114,7 +1115,8 @@
 
                     <StackPanel Grid.Row="0" Margin="0,0,0,15">
                         <TextBlock Text="데이터 관리 (마스터 데이터베이스)" FontSize="18" FontWeight="Bold" Foreground="#111827"/>
-                        <TextBlock Text="구글 폼 연동 마스터 데이터입니다. 여기서 수정/삭제해도 대시보드의 현재 좌석 데이터가 즉시 손실되지 않습니다." FontSize="12" Foreground="#6B7280" Margin="0,4,0,0"/>
+                        <TextBlock x:Name="TxtMasterSeasonInfo" Text="기본적으로 이번 시즌에 활동한 학생만 보여줍니다. 학생 정보 자체는 시즌이 바뀌어도 지워지지 않으며, [지난 시즌까지 보기]로 전체를 볼 수 있습니다."
+                                   FontSize="12" Foreground="#6B7280" Margin="0,4,0,0" TextWrapping="Wrap"/>
                     </StackPanel>
 
                     <!-- Student Search Bar -->
@@ -1123,12 +1125,14 @@
                             <TextBlock Text="검색어 (학번/이름/지도교수): " FontSize="13" FontWeight="SemiBold" Foreground="#374151" VerticalAlignment="Center" Margin="0,0,8,0"/>
                             <TextBox x:Name="TxtSearchStudent" Width="200" Padding="5" VerticalContentAlignment="Center" KeyUp="TxtSearchStudent_KeyUp" Margin="0,0,10,0"/>
                             <Button Content="🔍 검색" Style="{StaticResource ActionBarBtn}" Padding="15,6" Click="BtnSearchStudent_Click" Margin="0,0,5,0"/>
-                            <Button Style="{StaticResource ActionBarBtn}" Padding="15,6" Click="BtnClearStudentSearch_Click" Margin="0,0,8,0">
+                            <Button Style="{StaticResource ActionBarBtn}" Padding="15,6" Click="BtnClearStudentSearch_Click" Margin="0,0,12,0">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE72C;" Margin="0,0,5,0" VerticalAlignment="Center"/>
-                                    <TextBlock Text="전체보기" VerticalAlignment="Center"/>
+                                    <TextBlock Text="검색 초기화" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Button>
+                            <CheckBox x:Name="ChkShowAllSeasonStudents" Content="지난 시즌까지 보기" VerticalAlignment="Center" FontSize="12" Margin="0,0,12,0"
+                                      Checked="ChkShowAllSeasonStudents_Changed" Unchecked="ChkShowAllSeasonStudents_Changed"/>
                             <Button x:Name="BtnImportDataManageExcel" Content="📥 엑셀 가져오기" Style="{StaticResource ActionBarBtn}" Padding="15,6" Click="BtnImportDataManageExcel_Click"/>
                             <Button x:Name="BtnDeleteAllStudents" Content="🗑️ 전체 삭제" Style="{StaticResource ActionBarBtn}" Padding="15,6" Click="BtnDeleteAllStudents_Click" Background="#EF4444" Foreground="White" BorderBrush="#DC2626" Margin="8,0,0,0"/>
                         </StackPanel>
@@ -1149,6 +1153,7 @@
                                     <DataGridTextColumn Header="소속" Binding="{Binding Department}" Width="150"/>
                                     <DataGridTextColumn Header="지도교수" Binding="{Binding Advisor}" Width="100"/>
                                     <DataGridTextColumn Header="이메일" Binding="{Binding Email}" Width="150"/>
+                                    <DataGridTextColumn Header="활동 시즌" Binding="{Binding LastActiveSeason}" Width="110" IsReadOnly="True"/>
                                 </DataGrid.Columns>
                             </DataGrid>
 
@@ -1568,23 +1573,26 @@
                 </Border.Effect>
                 <Grid>
                     <Grid.RowDefinitions>
+                        <!-- 헤더 버튼들 (제목과 겹치지 않도록 별도 행으로 분리 — 겹치면 클릭 범위가 줄어든다) -->
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
-                    
+
                     <!-- Header buttons -->
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-15,0,0">
-                        <Button x:Name="BtnSelectCabinetStudent" Content="학생선택" Visibility="Collapsed" Style="{StaticResource ModalBtn}" Padding="15,6" FontSize="12" Click="BtnSelectCabinetStudent_Click" Margin="0,0,10,0"/>
-                        <Button x:Name="BtnEditCabinetInfo" Content="정보 수정" Style="{StaticResource ModalBtn}" Background="#F3F4F6" Foreground="#374151" Padding="15,6" FontSize="12" FontWeight="SemiBold" Click="BtnEditCabinetInfo_Click" Margin="0,0,10,0"/>
-                        <Button x:Name="BtnCloseCabinetModal" Content="✕" Style="{StaticResource IconBtn}" Click="BtnCloseCabinetModal_Click"/>
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,0,0,10">
+                        <Button x:Name="BtnMoveCabinet" Content="🔄 좌석 옮기기" Visibility="Collapsed" Style="{StaticResource ModalBtn}" Padding="15,8" FontSize="12" MinHeight="34" Click="BtnMoveCabinet_Click" Margin="0,0,10,0"/>
+                        <Button x:Name="BtnSelectCabinetStudent" Content="학생선택" Visibility="Collapsed" Style="{StaticResource ModalBtn}" Padding="15,8" FontSize="12" MinHeight="34" Click="BtnSelectCabinetStudent_Click" Margin="0,0,10,0"/>
+                        <Button x:Name="BtnEditCabinetInfo" Content="정보 수정" Style="{StaticResource ModalBtn}" Background="#F3F4F6" Foreground="#374151" Padding="15,8" FontSize="12" FontWeight="SemiBold" MinHeight="34" MinWidth="86" Click="BtnEditCabinetInfo_Click" Margin="0,0,10,0"/>
+                        <Button x:Name="BtnCloseCabinetModal" Content="✕" Style="{StaticResource IconBtn}" Width="34" Height="34" VerticalAlignment="Center" Click="BtnCloseCabinetModal_Click"/>
                     </StackPanel>
 
                     <!-- Title -->
-                    <TextBlock x:Name="TxtCabinetModalTitle" Text="캐비닛 00번 상세 정보" FontSize="18" FontWeight="Bold" Foreground="#111827" Margin="0,0,0,20"/>
+                    <TextBlock Grid.Row="1" x:Name="TxtCabinetModalTitle" Text="캐비닛 00번 상세 정보" FontSize="18" FontWeight="Bold" Foreground="#111827" Margin="0,0,0,20"/>
 
                     <!-- Fields -->
-                    <Grid Grid.Row="1" Margin="10,0,10,0" VerticalAlignment="Center">
+                    <Grid Grid.Row="2" Margin="10,0,10,0" VerticalAlignment="Center">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
@@ -1609,9 +1617,8 @@
                     </Grid>
 
                     <!-- Save Button (Only visible during edit) -->
-                    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,0">
-                        <Button x:Name="BtnMoveCabinet" Content="🔄 좌석 옮기기" Visibility="Collapsed" Style="{StaticResource ModalBtn}" Padding="20,8" Click="BtnMoveCabinet_Click" Margin="0,0,10,0"/>
-                        <Button x:Name="BtnSaveCabinetModal" Content="저장" Visibility="Collapsed" Style="{StaticResource ModalBtn}" Background="#10B981" Padding="20,8" Click="BtnSaveCabinetModal_Click"/>
+                    <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,0">
+                        <Button x:Name="BtnSaveCabinetModal" Content="저장" Visibility="Collapsed" Style="{StaticResource ModalBtn}" Background="#10B981" Padding="20,8" MinHeight="36" MinWidth="86" Click="BtnSaveCabinetModal_Click"/>
                     </StackPanel>
                 </Grid>
             </Border>
