@@ -11,11 +11,20 @@ namespace SeatManagerApp
     /// </summary>
     public class AppConfig
     {
+        /// <summary>
+        /// (예전 버전 호환용) 예전 '응답 스프레드시트 ID' 칸에 저장되던 값.
+        /// 지금은 <see cref="SangsangLabFormUrl"/>이 이 역할을 대신하며, 처음 실행 시 이 값이 있고
+        /// SangsangLabFormUrl이 비어 있으면 한 번만 옮겨 담는다(마이그레이션용). 화면에는 더 이상 없다.
+        /// </summary>
         public string SpreadsheetId { get; set; } = string.Empty;
         public bool PollingEnabled { get; set; } = true;
         public int PollingIntervalSeconds { get; set; } = 60;
 
-        // 신청 폼 주소 (기록/안내용 — 동기화는 위 SpreadsheetId로 이루어진다)
+        /// <summary>
+        /// 상상Lab 신청 폼(=메인) 응답 스프레드시트 주소. 실제 동기화에 쓰인다 —
+        /// 상상Lab 신청과, 캐비닛·기자재 전용 시트를 지정하지 않은 신청이 모두 여기서 들어온다
+        /// (<see cref="GoogleFormsService.ExtractSpreadsheetId"/>로 주소에서 ID를 뽑는다).
+        /// </summary>
         public string SangsangLabFormUrl { get; set; } = string.Empty;
 
         /// <summary>

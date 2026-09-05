@@ -75,12 +75,12 @@ namespace SeatManagerApp
         public string EquipmentType { get; set; } = string.Empty;
         public DateTime RentalDate { get; set; }
         public int RentalPeriodDays { get; set; } = 7; // Default 7 days rental
-        public DateTime DueDate => RentalDate.AddDays(RentalPeriodDays);
+        [JsonIgnore] public DateTime DueDate => RentalDate.AddDays(RentalPeriodDays);
         public bool IsReturned { get; set; } = false;
         public static DateTime SimulatedDate { get; set; } = new DateTime(2026, 7, 16);
-        public bool IsOverdue => DueDate < SimulatedDate;
-        public bool IsWarning => !IsReturned && !IsOverdue && (DueDate - SimulatedDate).TotalDays <= 7;
-        public string StatusDisplay => IsReturned ? "반납 완료" : (IsOverdue ? "연체됨" : (IsWarning ? "반납 임박" : "대여중"));
+        [JsonIgnore] public bool IsOverdue => DueDate < SimulatedDate;
+        [JsonIgnore] public bool IsWarning => !IsReturned && !IsOverdue && (DueDate - SimulatedDate).TotalDays <= 7;
+        [JsonIgnore] public string StatusDisplay => IsReturned ? "반납 완료" : (IsOverdue ? "연체됨" : (IsWarning ? "반납 임박" : "대여중"));
 
         // Columns requested in screenshot
         public int Quantity { get; set; } = 1; // 대여수량
@@ -94,22 +94,25 @@ namespace SeatManagerApp
         public string Phone { get; set; } = "010-0000-0000"; // 연락처
         public string Advisor { get; set; } = "김동욱 교수"; // 지도교수
         public DateTime? ReturnDate { get; set; } // 반납일
-        public string DisplayDeptYear => $"{Department} / {YearLevel}";
-        public string DisplayPhoneAdvisor => $"{Phone} / {Advisor}";
+        [JsonIgnore] public string DisplayDeptYear => $"{Department} / {YearLevel}";
+        [JsonIgnore] public string DisplayPhoneAdvisor => $"{Phone} / {Advisor}";
         public string SourceKey { get; set; } = string.Empty; // 중복 동기화 방지용 키
 
         // ===== 개체 번호 표기 =====
 
         /// <summary>본체(VR/Quest 포함)인지.</summary>
+        [JsonIgnore]
         public bool IsMainframe =>
             EquipmentType.Contains("VR") || EquipmentType.Contains("Quest") || EquipmentType.Contains("본체");
 
         /// <summary>개체 번호("No. 17"). 번호를 못 찾으면 빈 문자열.</summary>
+        [JsonIgnore]
         public string UnitNumber => ExtractUnitNumber(EquipmentType);
 
         /// <summary>
         /// 대여품목 표시용. 개체 번호를 함께 보여준다.
         /// </summary>
+        [JsonIgnore]
         public string DisplayEquipment
         {
             get
@@ -171,10 +174,10 @@ namespace SeatManagerApp
         /// <summary>[기타]로 등록할 때 수기로 적어 넣은 내용.</summary>
         public string Detail { get; set; } = string.Empty;
 
-        public string DisplayUnit => $"{EquipmentName} No. {UnitNumber}";
+        [JsonIgnore] public string DisplayUnit => $"{EquipmentName} No. {UnitNumber}";
 
         /// <summary>목록에 보여줄 내용. 기타가 아니면 구분명을 그대로 쓴다.</summary>
-        public string DisplayDetail => string.IsNullOrWhiteSpace(Detail) ? IssueType : Detail;
+        [JsonIgnore] public string DisplayDetail => string.IsNullOrWhiteSpace(Detail) ? IssueType : Detail;
     }
 
     public class ApprovalRequest

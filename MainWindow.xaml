@@ -364,11 +364,11 @@
 
                             <!-- Action Buttons -->
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,8">
-                                <Button x:Name="BtnRefresh" FontFamily="Segoe MDL2 Assets" Content="&#xE72C;" Width="35" Height="35" Style="{StaticResource ActionBarBtn}" Margin="0,0,8,0" Click="BtnRefresh_Click"/>
-                                <Button x:Name="BtnSyncData" Content="데이터 동기화" Style="{StaticResource ActionBarBtn}" Margin="0,0,8,0" Click="BtnSyncData_Click"/>
                                 <Button Content="랜덤 배정" Style="{StaticResource ActionBarBtn}" Margin="0,0,8,0" Click="BtnRandomAllocation_Click"/>
                                 <Button x:Name="BtnSeatFixMode" Content="좌석 고정 모드" Style="{StaticResource ActionBarBtn}" Margin="0,0,8,0" Click="BtnSeatFixMode_Click"/>
                                 <Button x:Name="BtnSeatDeleteMode" Content="좌석 데이터 삭제" Style="{StaticResource ActionBarBtn}" Margin="0,0,8,0" Click="BtnSeatDeleteMode_Click"/>
+                                <Button x:Name="BtnLoadSeatData" Content="📥 좌석데이터 불러오기" Style="{StaticResource ActionBarBtn}" Margin="0,0,8,0" Click="BtnLoadSeatData_Click"/>
+                                <Button x:Name="BtnMaskSeatInfo" Content="🔒 정보 가리기" Style="{StaticResource ActionBarBtn}" Margin="0,0,8,0" Click="BtnMaskSeatInfo_Click"/>
                                 <Button x:Name="BtnImportDashboardExcel" Content="📤 엑셀 내보내기" Style="{StaticResource ActionBarBtn}" Click="BtnImportDashboardExcel_Click"/>
                                 <Button x:Name="BtnDeleteSelected" Content="선택된 좌석 삭제" Background="#EF4444" Foreground="White" BorderThickness="0" Padding="15,8" FontWeight="Bold" Margin="8,0,0,0" Visibility="Collapsed" Click="BtnDeleteSelected_Click">
                                     <Button.Resources>
@@ -1195,27 +1195,37 @@
                                     <TextBlock Text="플랫폼: .NET 10.0 WPF Application" Margin="0,0,0,15"/>
 
                                     <TextBlock Text="구글 폼 연동 설정" FontSize="14" FontWeight="Bold" Foreground="#374151" Margin="0,15,0,10"/>
-                                    
-                                    <TextBlock Text="상상Lab용 구글 폼 URL" FontSize="11" Foreground="#6B7280" Margin="0,0,0,4"/>
-                                    <TextBox x:Name="TxtSangsangLabFormUrl" Height="35" BorderBrush="#D1D5DB" BorderThickness="1" Padding="10" Margin="0,0,0,10" VerticalAlignment="Center"/>
 
-                                    <TextBlock Text="캐비닛용 구글 폼 URL" FontSize="11" Foreground="#6B7280" Margin="0,0,0,4"/>
-                                    <TextBox x:Name="TxtCabinetFormUrl" Height="35" BorderBrush="#D1D5DB" BorderThickness="1" Padding="10" Margin="0,0,0,4" VerticalAlignment="Center"/>
-                                    <TextBlock Text="※ 캐비닛 폼의 [응답] → [시트에서 보기] 스프레드시트 주소를 넣으면, 캐비닛 신청을 이 시트에서 따로 받아옵니다 (모두 '캐비닛'으로 등록). 이 시트도 아래 서비스 계정에 '뷰어' 공유가 필요합니다."
-                                               FontSize="10" Foreground="#9CA3AF" TextWrapping="Wrap" Margin="0,0,0,10"/>
+                                    <!-- ===== 신청 폼 응답 시트 ===== -->
+                                    <Border Background="#F9FAFB" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="6" Padding="15" Margin="0,0,0,15">
+                                        <StackPanel>
+                                            <TextBlock Text="신청 폼 응답 시트" FontSize="13" FontWeight="Bold" Foreground="#374151" Margin="0,0,0,4"/>
+                                            <TextBlock Text="상상Lab 신청 폼 URL은 실제 동기화에 쓰입니다 — 상상Lab 신청과, 캐비닛·기자재 전용 시트를 따로 지정하지 않은 신청이 모두 이 시트에서 들어옵니다. 캐비닛·기자재는 신청을 별도 시트로 따로 받고 싶을 때만 채우세요."
+                                                       FontSize="10" Foreground="#9CA3AF" TextWrapping="Wrap" Margin="0,0,0,14"/>
 
-                                    <TextBlock Text="기자재용 구글 폼 URL" FontSize="11" Foreground="#6B7280" Margin="0,0,0,4"/>
-                                    <TextBox x:Name="TxtEquipmentFormUrl" Height="35" BorderBrush="#D1D5DB" BorderThickness="1" Padding="10" Margin="0,0,0,4" VerticalAlignment="Center"/>
-                                    <TextBlock Text="※ 기자재 폼의 [응답] → [시트에서 보기] 스프레드시트 주소를 넣으면, 기자재 신청을 이 시트에서 따로 받아옵니다 (모두 '기자재'로 등록). 이 시트도 아래 서비스 계정에 '뷰어' 공유가 필요합니다."
-                                               FontSize="10" Foreground="#9CA3AF" TextWrapping="Wrap" Margin="0,0,0,10"/>
+                                            <TextBlock Text="상상Lab 신청 폼 URL  (실제 동기화에 사용됨)" FontSize="11" Foreground="#6B7280" Margin="0,0,0,4"/>
+                                            <TextBox x:Name="TxtSangsangLabFormUrl" Height="35" BorderBrush="#D1D5DB" BorderThickness="1" Padding="10" Margin="0,0,0,4" VerticalAlignment="Center"/>
+                                            <TextBlock Text="※ 폼의 [응답] → [시트에서 보기] 주소를 넣으세요. 이 시트를 아래 서비스 계정에 '뷰어'로 공유해야 합니다."
+                                                       FontSize="10" Foreground="#9CA3AF" TextWrapping="Wrap" Margin="0,0,0,14"/>
+
+                                            <TextBlock Text="캐비닛 응답 시트 주소  (선택 — 넣으면 캐비닛 신청만 이 시트에서 따로 받습니다)" FontSize="11" Foreground="#6B7280" Margin="0,0,0,4"/>
+                                            <TextBox x:Name="TxtCabinetFormUrl" Height="35" BorderBrush="#D1D5DB" BorderThickness="1" Padding="10" Margin="0,0,0,4" VerticalAlignment="Center"/>
+                                            <TextBlock Text="※ 캐비닛 폼의 [응답] → [시트에서 보기] 주소를 넣으세요. 이 시트도 아래 서비스 계정에 '뷰어' 공유가 필요합니다."
+                                                       FontSize="10" Foreground="#9CA3AF" TextWrapping="Wrap" Margin="0,0,0,14"/>
+
+                                            <TextBlock Text="기자재 응답 시트 주소  (선택 — 넣으면 기자재 신청만 이 시트에서 따로 받습니다)" FontSize="11" Foreground="#6B7280" Margin="0,0,0,4"/>
+                                            <TextBox x:Name="TxtEquipmentFormUrl" Height="35" BorderBrush="#D1D5DB" BorderThickness="1" Padding="10" Margin="0,0,0,4" VerticalAlignment="Center"/>
+                                            <TextBlock Text="※ 기자재 폼의 [응답] → [시트에서 보기] 주소를 넣으세요. 이 시트도 아래 서비스 계정에 '뷰어' 공유가 필요합니다."
+                                                       FontSize="10" Foreground="#9CA3AF" TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                    </Border>
 
                                     <!-- ===== 구글 시트 실연동 ===== -->
                                     <Border Background="#F0FDF4" BorderBrush="#BBF7D0" BorderThickness="1" CornerRadius="6" Padding="15" Margin="0,0,0,15">
                                         <StackPanel>
-                                            <TextBlock Text="구글 시트 연동 (실제 신청 수신)" FontSize="13" FontWeight="Bold" Foreground="#166534" Margin="0,0,0,10"/>
-
-                                            <TextBlock Text="응답 스프레드시트 ID" FontSize="11" Foreground="#6B7280" Margin="0,0,0,4"/>
-                                            <TextBox x:Name="TxtSpreadsheetId" Height="35" BorderBrush="#D1D5DB" BorderThickness="1" Padding="10" Margin="0,0,0,10" VerticalAlignment="Center"/>
+                                            <TextBlock Text="구글 시트 연동 (서비스 계정 · 동기화 설정)" FontSize="13" FontWeight="Bold" Foreground="#166534" Margin="0,0,0,4"/>
+                                            <TextBlock Text="위에서 넣은 시트 주소들을 이 서비스 계정으로 읽어옵니다. 시트마다 이 주소를 '뷰어'로 공유해 두어야 합니다."
+                                                       FontSize="10" Foreground="#4D7C60" TextWrapping="Wrap" Margin="0,0,0,10"/>
 
                                             <TextBlock Text="서비스 계정 (이 주소로 시트를 '뷰어' 공유해야 합니다)" FontSize="11" Foreground="#6B7280" Margin="0,0,0,4"/>
                                             <TextBox x:Name="TxtServiceAccountEmail" Height="30" IsReadOnly="True" Background="#F3F4F6" BorderBrush="#D1D5DB" BorderThickness="1" Padding="10,5" Margin="0,0,0,8" FontSize="11" VerticalContentAlignment="Center"/>
@@ -1249,42 +1259,48 @@
                                     <TextBlock Text="학사 시즌 일정 관리" FontSize="14" FontWeight="Bold" Foreground="#374151" Margin="0,15,0,10"/>
                                     <Border Background="#EFF6FF" BorderBrush="#BFDBFE" BorderThickness="1" CornerRadius="6" Padding="15" Margin="0,0,0,15">
                                         <StackPanel>
-                                            <TextBlock Text="연도별로 1학기 / 여름방학 / 2학기 / 겨울방학의 시작일과 종료일을 지정합니다. 현재 날짜가 포함되는 시즌이 대시보드에 자동으로 표시됩니다."
+                                            <TextBlock Text="연도 카드를 누르면 그 연도의 1학기 / 여름방학 / 2학기 / 겨울방학 시작일·종료일을 입력할 수 있습니다. 현재 날짜가 포함되는 시즌이 대시보드에 자동으로 표시됩니다."
                                                        FontSize="11" Foreground="#6B7280" TextWrapping="Wrap" Margin="0,0,0,12"/>
 
-                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,10" VerticalAlignment="Center">
-                                                <TextBlock Text="연도" FontWeight="Bold" Foreground="#374151" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                                <ComboBox x:Name="ComboSeasonYear" Width="110" Padding="5" IsEditable="True" VerticalContentAlignment="Center"
-                                                          SelectionChanged="ComboSeasonYear_SelectionChanged"/>
-                                                <Button x:Name="BtnAddSeasonYear" Content="＋ 연도 추가" Padding="12,6" Margin="10,0,0,0" Style="{StaticResource ActionBarBtn}" Click="BtnAddSeasonYear_Click"/>
-                                                <Button x:Name="BtnDeleteSeasonYear" Content="🗑 연도 삭제" Padding="12,6" Margin="8,0,0,0" Style="{StaticResource ActionBarBtn}" Click="BtnDeleteSeasonYear_Click"/>
-                                            </StackPanel>
+                                            <!-- 연도 카드 목록 (코드에서 생성) -->
+                                            <Border Background="#D1FAE5" BorderBrush="#A7F3D0" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,0,14">
+                                                <WrapPanel x:Name="PanelSeasonYears" Orientation="Horizontal"/>
+                                            </Border>
 
-                                            <DataGrid x:Name="GridSeasonSchedule" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
-                                                      HeadersVisibility="Column" GridLinesVisibility="Horizontal" RowHeight="40" BorderBrush="#D1D5DB" BorderThickness="1"
-                                                      Background="White" Margin="0,0,0,10">
-                                                <DataGrid.Columns>
-                                                    <DataGridTextColumn Header="시즌" Binding="{Binding Name}" Width="120" IsReadOnly="True"/>
-                                                    <DataGridTemplateColumn Header="시작일" Width="180">
-                                                        <DataGridTemplateColumn.CellTemplate>
-                                                            <DataTemplate>
-                                                                <DatePicker SelectedDate="{Binding StartDate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" BorderThickness="0" VerticalContentAlignment="Center"/>
-                                                            </DataTemplate>
-                                                        </DataGridTemplateColumn.CellTemplate>
-                                                    </DataGridTemplateColumn>
-                                                    <DataGridTemplateColumn Header="종료일" Width="180">
-                                                        <DataGridTemplateColumn.CellTemplate>
-                                                            <DataTemplate>
-                                                                <DatePicker SelectedDate="{Binding EndDate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" BorderThickness="0" VerticalContentAlignment="Center"/>
-                                                            </DataTemplate>
-                                                        </DataGridTemplateColumn.CellTemplate>
-                                                    </DataGridTemplateColumn>
-                                                </DataGrid.Columns>
-                                            </DataGrid>
+                                            <!-- 선택한 연도의 시즌 일정 편집 -->
+                                            <Border x:Name="PanelSeasonEditor" Background="White" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="6" Padding="15" Margin="0,0,0,10" Visibility="Collapsed">
+                                                <StackPanel>
+                                                    <Grid Margin="0,0,0,10">
+                                                        <TextBlock x:Name="TxtSeasonEditorTitle" Text="연도 시즌 일정" FontSize="13" FontWeight="Bold" Foreground="#111827" VerticalAlignment="Center"/>
+                                                        <Button x:Name="BtnDeleteSeasonYear" Content="🗑 이 연도 삭제" Padding="12,6" HorizontalAlignment="Right" Style="{StaticResource ActionBarBtn}" Click="BtnDeleteSeasonYear_Click"/>
+                                                    </Grid>
 
-                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                                <Button x:Name="BtnSaveSeasonSchedule" Content="💾 시즌 일정 저장" Padding="15,8" Style="{StaticResource ActionBarBtn}" Click="BtnSaveSeasonSchedule_Click"/>
-                                            </StackPanel>
+                                                    <DataGrid x:Name="GridSeasonSchedule" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                                                              HeadersVisibility="Column" GridLinesVisibility="Horizontal" RowHeight="40" BorderBrush="#D1D5DB" BorderThickness="1"
+                                                              Background="White" Margin="0,0,0,10">
+                                                        <DataGrid.Columns>
+                                                            <DataGridTextColumn Header="시즌" Binding="{Binding Name}" Width="120" IsReadOnly="True"/>
+                                                            <DataGridTemplateColumn Header="시작일" Width="180">
+                                                                <DataGridTemplateColumn.CellTemplate>
+                                                                    <DataTemplate>
+                                                                        <DatePicker SelectedDate="{Binding StartDate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" BorderThickness="0" VerticalContentAlignment="Center"/>
+                                                                    </DataTemplate>
+                                                                </DataGridTemplateColumn.CellTemplate>
+                                                            </DataGridTemplateColumn>
+                                                            <DataGridTemplateColumn Header="종료일" Width="180">
+                                                                <DataGridTemplateColumn.CellTemplate>
+                                                                    <DataTemplate>
+                                                                        <DatePicker SelectedDate="{Binding EndDate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" BorderThickness="0" VerticalContentAlignment="Center"/>
+                                                                    </DataTemplate>
+                                                                </DataGridTemplateColumn.CellTemplate>
+                                                            </DataGridTemplateColumn>
+                                                        </DataGrid.Columns>
+                                                    </DataGrid>
+
+                                                    <Button x:Name="BtnSaveSeasonSchedule" Content="💾 시즌 일정 저장" Padding="15,8" HorizontalAlignment="Left" Style="{StaticResource ActionBarBtn}" Click="BtnSaveSeasonSchedule_Click"/>
+                                                </StackPanel>
+                                            </Border>
+
                                             <TextBlock x:Name="TxtCurrentSeasonInfo" Text="현재 시즌: (판별 전)" FontSize="12" FontWeight="Bold" Foreground="#1D4ED8" TextWrapping="Wrap"/>
                                         </StackPanel>
                                     </Border>

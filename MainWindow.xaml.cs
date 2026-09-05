@@ -43,8 +43,8 @@ namespace SeatManagerApp
         /// <summary>설정 화면 시즌 표(편집용 사본).</summary>
         private ObservableCollection<SeasonPeriod> _seasonEditRows = new ObservableCollection<SeasonPeriod>();
 
-        /// <summary>대시보드 연도/학기 콤보를 코드에서 맞추는 중인지(재진입 방지).</summary>
-        private bool _syncingSeasonCombos = false;
+        /// <summary>설정 화면에서 지금 편집 중인 연도(연도 카드로 선택). null이면 편집 영역을 숨긴다.</summary>
+        private int? _selectedSeasonYear;
 
         // Equipment Rentals
         private ObservableCollection<RentalItem> _rentals = new ObservableCollection<RentalItem>();
@@ -69,6 +69,9 @@ namespace SeatManagerApp
         private bool _isSeatFixMode = false;
         private bool _isSeatDeleteMode = false;
         private bool _isCabinetFixed = false;
+
+        /// <summary>대시보드 좌석에서 학번 가운데 4자리와 이름 가운데 한 글자를 '*'로 가릴지 여부.</summary>
+        private bool _maskSeatInfo = false;
 
         // Current simulated date
         private DateTime _currentSimulatedDate;
@@ -95,7 +98,7 @@ namespace SeatManagerApp
 
         /// <summary>
         /// 이미 앱으로 가져온 폼 응답의 SourceKey. 폴링할 때마다 시트 전체를 다시 읽으므로
-        /// 승인/반려로 목록에서 사라진 뒤에도 재등록되지 않도록 세션 내내 유지한다.
+        /// 승인/반려로 목록에서 사라진 뒤에도 재등록되지 않도록 저장해 둔다(앱을 껐다 켜도 유지).
         /// </summary>
         private readonly HashSet<string> _importedSourceKeys = new HashSet<string>();
 
@@ -109,6 +112,10 @@ namespace SeatManagerApp
             _seasonConfig = SeasonConfig.Load();
             SeedDefaultSeasonYearsIfEmpty();
             LoadSeatCache();
+
+            // 학생 마스터·승인 신청서·대여·캐비닛·메모 등 나머지 데이터도 불러온다
+            LoadAppState();
+
             this.Closing += MainWindow_Closing;
 
             // Update date display
@@ -347,8 +354,8 @@ namespace SeatManagerApp
                     seats.Add(new Seat { SeatNumber = i });
                 }
 
-                // Setup specific pillars (Row 3, Col 6, ColSpan 2 -> represents Pillar)
-                seats[21].IsPillar = true; // Spot where pillar is located instead of Seat 22
+                // 기둥(棟)은 좌석이 아니라 화면에 따로 그려지는 칸(SeatNum -1, RenderSeatGrid 참고)이다.
+                // 22번은 그 옆에 있는 정상 좌석이므로 여기서 IsPillar를 세우면 안 된다.
 
                 // Pre-populate students in all active seats using copies of master database
                 int studentIdx = 0;
@@ -405,6 +412,14 @@ namespace SeatManagerApp
                 var data = System.Text.Json.JsonSerializer
                     .Deserialize<Dictionary<string, List<Seat>>>(json);
                 if (data != null) _seatLayoutCache = data;
+
+                // 예전 버전에서 22번 좌석을 기둥으로 잘못 저장해 뒀다면 여기서 바로잡는다
+                // (22번은 실제 좌석이고, 기둥은 화면에 따로 그려지는 칸이다).
+                foreach (var seats in _seatLayoutCache.Values)
+                {
+                    var seat22 = seats.FirstOrDefault(s => s.SeatNumber == 22);
+                    if (seat22 != null) seat22.IsPillar = false;
+                }
             }
             catch
             {
@@ -429,9 +444,52 @@ namespace SeatManagerApp
             }
         }
 
+        /// <summary>학생 마스터·승인 신청서·대여·캐비닛·메모 등을 디스크에서 불러온다. 처음 실행이면 아무것도 하지 않는다.</summary>
+        private void LoadAppState()
+        {
+            var state = AppState.Load();
+
+            _masterStudents.AddRange(state.MasterStudents);
+            foreach (var a in state.Approvals) _approvals.Add(a);
+            foreach (var a in state.ApprovalHistory) _approvalHistory.Add(a);
+            _importedSourceKeys.UnionWith(state.ImportedSourceKeys);
+            foreach (var r in state.Rentals) _rentals.Add(r);
+            foreach (var r in state.RentalHistory) _rentalHistory.Add(r);
+            foreach (var i in state.EquipmentIssues) _equipmentIssues.Add(i);
+            foreach (var c in state.CabinetAllocations)
+                _cabinetAllocations[c.CabinetNum] = (c.Student!, c.Period);
+            foreach (var m in state.Memos) _memos.Add(m);
+        }
+
+        /// <summary>학생 마스터·승인 신청서·대여·캐비닛·메모 등을 디스크에 저장한다.</summary>
+        private void SaveAppState()
+        {
+            var state = new AppState
+            {
+                MasterStudents = _masterStudents,
+                Approvals = _approvals.ToList(),
+                ApprovalHistory = _approvalHistory.ToList(),
+                ImportedSourceKeys = _importedSourceKeys.ToList(),
+                Rentals = _rentals.ToList(),
+                RentalHistory = _rentalHistory.ToList(),
+                EquipmentIssues = _equipmentIssues.ToList(),
+                CabinetAllocations = _cabinetAllocations
+                    .Select(kvp => new CabinetAllocationEntry
+                    {
+                        CabinetNum = kvp.Key,
+                        Student = kvp.Value.Student,
+                        Period = kvp.Value.Period
+                    })
+                    .ToList(),
+                Memos = _memos.ToList()
+            };
+            state.Save();
+        }
+
         private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
         {
             SaveSeatCache();
+            SaveAppState();
             _seasonConfig.Save();
         }
 
@@ -465,28 +523,20 @@ namespace SeatManagerApp
         {
             if (_currentSeason == null) return;
 
-            _syncingSeasonCombos = true;
-            try
-            {
-                string yearStr = _currentSeason.Value.Year.ToString();
-                if (!ComboSearchYear.Items.Cast<object>().Any(it => (it as string) == yearStr))
-                    ComboSearchYear.Items.Add(yearStr);
-                ComboSearchYear.SelectedItem = ComboSearchYear.Items.Cast<object>()
-                    .FirstOrDefault(it => (it as string) == yearStr);
+            string yearStr = _currentSeason.Value.Year.ToString();
+            if (!ComboSearchYear.Items.Cast<object>().Any(it => (it as string) == yearStr))
+                ComboSearchYear.Items.Add(yearStr);
+            ComboSearchYear.SelectedItem = ComboSearchYear.Items.Cast<object>()
+                .FirstOrDefault(it => (it as string) == yearStr);
 
-                foreach (var obj in ComboSearchSemester.Items)
-                {
-                    if (obj is ComboBoxItem cbi &&
-                        (cbi.Content?.ToString() ?? "") == _currentSeason.Value.Season)
-                    {
-                        ComboSearchSemester.SelectedItem = cbi;
-                        break;
-                    }
-                }
-            }
-            finally
+            foreach (var obj in ComboSearchSemester.Items)
             {
-                _syncingSeasonCombos = false;
+                if (obj is ComboBoxItem cbi &&
+                    (cbi.Content?.ToString() ?? "") == _currentSeason.Value.Season)
+                {
+                    ComboSearchSemester.SelectedItem = cbi;
+                    break;
+                }
             }
         }
 
@@ -514,109 +564,163 @@ namespace SeatManagerApp
 
         private void LoadSeasonSettingsUI()
         {
-            _syncingSeasonCombos = true;
-            try
+            // 선택 연도 기본값: 현재 시즌 연도 → 없으면 올해 → 없으면 가장 최근 연도
+            int cy = _currentSimulatedDate.Year;
+            int target = _currentSeason?.Year ?? cy;
+            if (!_seasonConfig.HasYear(target))
             {
-                ComboSeasonYear.Items.Clear();
                 var years = _seasonConfig.Years.ToList();
-                int cy = _currentSimulatedDate.Year;
-                if (!years.Contains(cy)) years.Add(cy);
-                years.Sort();
-                foreach (var y in years) ComboSeasonYear.Items.Add(y.ToString());
-
-                int target = _currentSeason?.Year ?? cy;
-                if (!years.Contains(target)) target = years.Count > 0 ? years[years.Count - 1] : cy;
-                ComboSeasonYear.SelectedItem = target.ToString();
-                ComboSeasonYear.Text = target.ToString();
+                target = years.Contains(cy) ? cy : (years.Count > 0 ? years[years.Count - 1] : cy);
             }
-            finally
-            {
-                _syncingSeasonCombos = false;
-            }
+            _selectedSeasonYear = _seasonConfig.HasYear(target) ? target : (int?)null;
 
+            RebuildSeasonYearCards();
             LoadSeasonRowsForSelectedYear();
             UpdateCurrentSeasonInfo();
         }
 
-        /// <summary>편집 가능한 콤보에서 연도 숫자를 읽는다.</summary>
-        private int? SelectedSeasonYear()
+        /// <summary>설정 탭의 연도 카드를 다시 그린다. 마지막에 [＋ 연도 추가] 카드를 붙인다.</summary>
+        private void RebuildSeasonYearCards()
         {
-            string raw = (ComboSeasonYear.Text ?? string.Empty).Trim();
-            if (string.IsNullOrEmpty(raw)) raw = (ComboSeasonYear.SelectedItem as string) ?? string.Empty;
-            return int.TryParse(raw, out int y) ? y : (int?)null;
+            if (PanelSeasonYears == null) return;
+            PanelSeasonYears.Children.Clear();
+
+            // 최근 연도가 왼쪽 위로 오도록 내림차순
+            foreach (int year in _seasonConfig.Years.OrderByDescending(y => y))
+            {
+                bool isSelected = _selectedSeasonYear == year;
+                bool isCurrent = _currentSeason?.Year == year;
+
+                var card = new Border
+                {
+                    Width = 150,
+                    Height = 74,
+                    CornerRadius = new CornerRadius(6),
+                    Margin = new Thickness(0, 0, 14, 14),
+                    Background = MakeBrush("#1E7A5F"),
+                    BorderBrush = MakeBrush(isSelected ? "#F59E0B" : (isCurrent ? "#93C5FD" : "#0F5132")),
+                    BorderThickness = new Thickness(isSelected || isCurrent ? 3 : 1),
+                    Cursor = Cursors.Hand,
+                    Tag = year
+                };
+
+                var stack = new StackPanel
+                {
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                stack.Children.Add(new TextBlock
+                {
+                    Text = year.ToString(),
+                    Foreground = Brushes.White,
+                    FontSize = 18,
+                    FontWeight = FontWeights.Bold,
+                    HorizontalAlignment = HorizontalAlignment.Center
+                });
+                if (isCurrent)
+                {
+                    stack.Children.Add(new TextBlock
+                    {
+                        Text = "● 현재 시즌",
+                        Foreground = MakeBrush("#DBEAFE"),
+                        FontSize = 10,
+                        FontWeight = FontWeights.SemiBold,
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        Margin = new Thickness(0, 3, 0, 0)
+                    });
+                }
+                card.Child = stack;
+                card.MouseLeftButtonUp += SeasonYearCard_Click;
+                PanelSeasonYears.Children.Add(card);
+            }
+
+            // [＋ 연도 추가] 카드
+            var addCard = new Border
+            {
+                Width = 150,
+                Height = 74,
+                CornerRadius = new CornerRadius(6),
+                Margin = new Thickness(0, 0, 14, 14),
+                Background = MakeBrush("#ECFDF5"),
+                BorderBrush = MakeBrush("#10B981"),
+                BorderThickness = new Thickness(2),
+                Cursor = Cursors.Hand
+            };
+            addCard.Child = new TextBlock
+            {
+                Text = "＋ 연도 추가",
+                Foreground = MakeBrush("#047857"),
+                FontSize = 13,
+                FontWeight = FontWeights.Bold,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            addCard.MouseLeftButtonUp += AddSeasonYearCard_Click;
+            PanelSeasonYears.Children.Add(addCard);
+        }
+
+        private static SolidColorBrush MakeBrush(string hex) =>
+            new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
+
+        private void SeasonYearCard_Click(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is Border b && b.Tag is int year)
+            {
+                _selectedSeasonYear = year;
+                RebuildSeasonYearCards();
+                LoadSeasonRowsForSelectedYear();
+            }
         }
 
         private void LoadSeasonRowsForSelectedYear()
         {
             _seasonEditRows = new ObservableCollection<SeasonPeriod>();
 
-            int? y = SelectedSeasonYear();
-            if (y != null)
+            int? y = _selectedSeasonYear;
+            if (y == null)
             {
-                var sched = _seasonConfig.GetYear(y.Value);
-                var seasons = sched != null
-                    ? SeasonConfig.NormalizeSeasons(y.Value, sched.Seasons)
-                    : SeasonConfig.DefaultSeasonsFor(y.Value);
-                foreach (var p in seasons) _seasonEditRows.Add(p.Clone());
-            }
-
-            GridSeasonSchedule.ItemsSource = _seasonEditRows;
-        }
-
-        private void ComboSeasonYear_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (_syncingSeasonCombos) return;
-            LoadSeasonRowsForSelectedYear();
-        }
-
-        private void BtnAddSeasonYear_Click(object sender, RoutedEventArgs e)
-        {
-            int? y = SelectedSeasonYear();
-            if (y == null || y < 2000 || y > 2100)
-            {
-                MessageBox.Show("추가할 연도를 숫자로 입력하세요. 예: 2027", "연도 추가",
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                GridSeasonSchedule.ItemsSource = _seasonEditRows;
+                if (PanelSeasonEditor != null) PanelSeasonEditor.Visibility = Visibility.Collapsed;
                 return;
             }
 
-            bool existed = _seasonConfig.HasYear(y.Value);
-            if (!existed)
-            {
-                _seasonConfig.EnsureYear(y.Value); // 예시 기준 기본 일정으로 생성
-                _seasonConfig.Save();
-            }
+            var sched = _seasonConfig.GetYear(y.Value);
+            var seasons = sched != null
+                ? SeasonConfig.NormalizeSeasons(y.Value, sched.Seasons)
+                : SeasonConfig.DefaultSeasonsFor(y.Value);
+            foreach (var p in seasons) _seasonEditRows.Add(p.Clone());
 
-            // 콤보에 연도 반영(정렬 유지)
-            var items = ComboSeasonYear.Items.Cast<string>()
-                .Select(s => int.TryParse(s, out int v) ? v : 0)
-                .Where(v => v > 0).ToList();
-            if (!items.Contains(y.Value)) items.Add(y.Value);
-            items.Sort();
+            GridSeasonSchedule.ItemsSource = _seasonEditRows;
+            if (TxtSeasonEditorTitle != null) TxtSeasonEditorTitle.Text = $"{y}년 시즌 일정";
+            if (PanelSeasonEditor != null) PanelSeasonEditor.Visibility = Visibility.Visible;
+        }
 
-            _syncingSeasonCombos = true;
-            try
-            {
-                ComboSeasonYear.Items.Clear();
-                foreach (var it in items) ComboSeasonYear.Items.Add(it.ToString());
-                ComboSeasonYear.SelectedItem = y.Value.ToString();
-                ComboSeasonYear.Text = y.Value.ToString();
-            }
-            finally
-            {
-                _syncingSeasonCombos = false;
-            }
+        private void AddSeasonYearCard_Click(object sender, MouseButtonEventArgs e)
+        {
+            // 다음 해(가장 큰 연도 + 1)를 기본값으로 추가한다. 이미 있으면 그 다음 해로.
+            var years = _seasonConfig.Years.ToList();
+            int newYear = years.Count > 0 ? years[years.Count - 1] + 1 : _currentSimulatedDate.Year;
+            while (_seasonConfig.HasYear(newYear)) newYear++;
 
+            var r = MessageBox.Show(
+                $"{newYear}년 시즌 일정을 기본값으로 추가하시겠습니까?\n" +
+                "(1학기 3/1~6/30, 여름방학 7/1~8/31, 2학기 9/1~12/31, 겨울방학 익년 1/1~2월 말일)\n\n" +
+                "추가한 뒤 각 시즌 날짜를 원하는 대로 수정하고 [💾 시즌 일정 저장]을 누르세요.",
+                "연도 추가", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (r != MessageBoxResult.Yes) return;
+
+            _seasonConfig.EnsureYear(newYear); // 예시 기준 기본 일정으로 생성
+            _seasonConfig.Save();
+
+            _selectedSeasonYear = newYear;
+            RebuildSeasonYearCards();
             LoadSeasonRowsForSelectedYear();
             DetectAndApplyCurrentSeason(initial: true);
-
-            MessageBox.Show(
-                existed ? $"{y}년 시즌 일정을 불러왔습니다." : $"{y}년 시즌 일정을 기본값으로 추가했습니다.",
-                "연도 추가", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         private void BtnDeleteSeasonYear_Click(object sender, RoutedEventArgs e)
         {
-            int? y = SelectedSeasonYear();
+            int? y = _selectedSeasonYear;
             if (y == null || !_seasonConfig.HasYear(y.Value))
             {
                 MessageBox.Show("삭제할 연도 일정이 없습니다.", "연도 삭제",
@@ -641,10 +745,10 @@ namespace SeatManagerApp
 
         private void BtnSaveSeasonSchedule_Click(object sender, RoutedEventArgs e)
         {
-            int? y = SelectedSeasonYear();
+            int? y = _selectedSeasonYear;
             if (y == null)
             {
-                MessageBox.Show("연도를 먼저 선택하세요.", "저장 실패",
+                MessageBox.Show("연도 카드를 먼저 선택하세요.", "저장 실패",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
@@ -681,6 +785,7 @@ namespace SeatManagerApp
             _seasonConfig.Save();
 
             DetectAndApplyCurrentSeason(initial: true);
+            RebuildSeasonYearCards();
             UpdateCurrentSeasonInfo();
 
             MessageBox.Show($"{y}년 시즌 일정을 저장했습니다.", "완료",
@@ -882,14 +987,14 @@ namespace SeatManagerApp
 
                     TextBlock idTxt = new TextBlock
                     {
-                        Text = seat.Student.StudentId,
+                        Text = _maskSeatInfo ? MaskStudentId(seat.Student.StudentId) : seat.Student.StudentId,
                         FontSize = 9,
                         Foreground = new SolidColorBrush(Color.FromRgb(75, 85, 99)),
                         HorizontalAlignment = HorizontalAlignment.Center
                     };
                     TextBlock nameTxt = new TextBlock
                     {
-                        Text = seat.Student.Name,
+                        Text = _maskSeatInfo ? MaskName(seat.Student.Name) : seat.Student.Name,
                         FontSize = 12,
                         FontWeight = FontWeights.Bold,
                         Foreground = new SolidColorBrush(Color.FromRgb(17, 24, 39)),
@@ -910,6 +1015,38 @@ namespace SeatManagerApp
                 Grid.SetColumnSpan(seatCard, pos.ColSpan);
                 SeatGridContainer.Children.Add(seatCard);
             }
+        }
+
+        // ================= 좌석 정보 가리기 (학번 중간 4자리 / 이름 가운데 글자) =================
+        private void BtnMaskSeatInfo_Click(object sender, RoutedEventArgs e)
+        {
+            _maskSeatInfo = !_maskSeatInfo;
+            BtnMaskSeatInfo.Content = _maskSeatInfo ? "🔓 정보 표시" : "🔒 정보 가리기";
+            RenderSeatGrid();
+        }
+
+        /// <summary>학번의 가운데 4자리를 '*'로 바꾼다. (예: 20221227 → 20****27) 8자리가 아니면 가운데 절반을 가린다.</summary>
+        private static string MaskStudentId(string id)
+        {
+            if (string.IsNullOrEmpty(id)) return id;
+
+            if (id.Length == 8)
+                return id.Substring(0, 2) + "****" + id.Substring(6);
+
+            if (id.Length <= 2) return id;
+
+            int hide = Math.Min(4, id.Length - 2);
+            int start = (id.Length - hide) / 2;
+            return id.Substring(0, start) + new string('*', hide) + id.Substring(start + hide);
+        }
+
+        /// <summary>이름의 가운데 한 글자를 '*'로 바꾼다. (예: 홍길동 → 홍*동, 이산 → 이*)</summary>
+        private static string MaskName(string name)
+        {
+            if (string.IsNullOrEmpty(name) || name.Length < 2) return name;
+
+            int mid = name.Length / 2; // 2글자→뒷글자, 3글자→가운데, 4글자→세번째
+            return name.Substring(0, mid) + "*" + name.Substring(mid + 1);
         }
 
         private void SeatCard_MouseDown(object sender, MouseButtonEventArgs e)
@@ -1347,57 +1484,6 @@ namespace SeatManagerApp
             }
         }
 
-        private void BtnRefresh_Click(object sender, RoutedEventArgs e)
-        {
-            MessageBoxResult result = MessageBox.Show("데이터 관리에서 학생 정보를 새로고침하시겠습니까?", "새로고침 확인", MessageBoxButton.YesNo, MessageBoxImage.Question);
-            if (result == MessageBoxResult.Yes)
-            {
-                // Clear current seats and reload from master database
-                foreach (var seat in _activeSeats)
-                {
-                    if (seat.Student != null && !seat.IsFixed)
-                    {
-                        seat.Student = null;
-                    }
-                }
-
-                var regStudents = _masterStudents.Where(s => !s.Department.Contains("대학원")).ToList();
-                var gradStudents = _masterStudents.Where(s => s.Department.Contains("대학원")).ToList();
-
-                int regIdx = 0;
-                int gradIdx = 0;
-
-                int[] assignedSeatNumbers = {
-                    13, 14, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 34, 36, 37, 38
-                };
-
-                foreach (int seatNum in assignedSeatNumbers)
-                {
-                    if (regIdx < regStudents.Count)
-                    {
-                        var seat = _activeSeats[seatNum - 1];
-                        if (!seat.IsFixed || seat.Student == null)
-                        {
-                            seat.Student = regStudents[regIdx++].Clone();
-                        }
-                    }
-                }
-
-                for (int seatNum = 43; seatNum <= 52; seatNum++)
-                {
-                    if (gradIdx < gradStudents.Count)
-                    {
-                        var seat = _activeSeats[seatNum - 1];
-                        seat.Student = gradStudents[gradIdx++].Clone();
-                        seat.IsFixed = true;
-                    }
-                }
-
-                RenderSeatGrid();
-                MessageBox.Show("데이터가 새로고침되었습니다.", "완료", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-        }
-
         // ================= STUDENT MODAL EDIT =================
         private void HandleModalEditSave()
         {
@@ -1621,30 +1707,8 @@ namespace SeatManagerApp
                 _approvals.Remove(req);
                 _approvalHistory.Add(req);
 
-                // If SangsangLab request, assign student to dashboard if they are approved
-                if (req.TabType == "상상Lab")
-                {
-                    // Check duplicate seat assignment and remove from old seat
-                    var duplicateSeat = _activeSeats.FirstOrDefault(s => s.Student != null && s.Student.StudentId == masterStudent.StudentId);
-                    if (duplicateSeat != null)
-                    {
-                        duplicateSeat.Student = null;
-                        duplicateSeat.IsFixed = false;
-                    }
-
-                    // Let's find an empty seat
-                    var emptySeat = _activeSeats.FirstOrDefault(s => s.Student == null && !s.IsPillar);
-                    if (emptySeat != null)
-                    {
-                        // 마스터 레코드를 복사해 앉힌다 (신청서가 아니라) — 둘이 어긋나지 않도록
-                        emptySeat.Student = masterStudent.Clone();
-
-                        if (emptySeat.Student.Department.Contains("대학원"))
-                        {
-                            emptySeat.IsFixed = true;
-                        }
-                    }
-                }
+                // 상상Lab 신청 승인은 학생 마스터 데이터(데이터 관리 탭)만 만든다.
+                // 대시보드 좌석에는 자동으로 앉히지 않는다 — 좌석 배정은 관리자가 직접 한다.
 
                 // If cabinet request is approved, assign the chosen cabinet block.
                 // 연장이면 위에서 이미 합친 기간으로 써 두었으므로 덮어쓰지 않는다.
@@ -1710,6 +1774,7 @@ namespace SeatManagerApp
 
                 SwitchTab(targetBtn, targetTab, targetTitle);
                 RenderSeatGrid();
+                SaveAppState();
             }
         }
 
@@ -1719,9 +1784,6 @@ namespace SeatManagerApp
             {
                 req.Status = "반려";
                 _approvals.Remove(req);
-                _approvalHistory.Add(req);
-
-                // Add to history list
                 _approvalHistory.Add(req);
 
                 Button targetBtn;
@@ -1748,6 +1810,7 @@ namespace SeatManagerApp
                 }
 
                 SwitchTab(targetBtn, targetTab, targetTitle);
+                SaveAppState();
             }
         }
 
@@ -1839,35 +1902,9 @@ namespace SeatManagerApp
                 GridMasterStudents.ItemsSource = null;
                 GridMasterStudents.ItemsSource = _masterStudents;
                 RenderSeatGrid();
+                SaveAppState();
                 MessageBox.Show("마스터 데이터가 수정되었으며 즉시 대시보드에 데이터가 업데이트되었습니다.", "완료", MessageBoxButton.OK, MessageBoxImage.Information);
             }
-        }
-
-        private void BtnSyncData_Click(object sender, RoutedEventArgs e)
-        {
-            int syncCount = 0;
-            foreach (var seat in _activeSeats)
-            {
-                if (seat.Student != null)
-                {
-                    var master = _masterStudents.FirstOrDefault(m => m.StudentId == seat.Student.StudentId);
-                    if (master != null)
-                    {
-                        seat.Student.Name = master.Name;
-                        seat.Student.Department = master.Department;
-                        seat.Student.Advisor = master.Advisor;
-                        seat.Student.Email = master.Email;
-                        if (seat.Student.Department.Contains("대학원"))
-                        {
-                            seat.IsFixed = true;
-                        }
-                        syncCount++;
-                    }
-                }
-            }
-            RenderSeatGrid();
-            UpdateAlertBadges();
-            MessageBox.Show($"총 {syncCount}명의 학생 데이터가 마스터 데이터베이스와 동기화되었습니다.", "동기화 완료", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         private void BtnDeleteMaster_Click(object sender, RoutedEventArgs e)
@@ -1881,6 +1918,7 @@ namespace SeatManagerApp
                     GridMasterStudents.ItemsSource = null;
                     GridMasterStudents.ItemsSource = _masterStudents;
                     PanelMasterEdit.IsEnabled = false;
+                    SaveAppState();
                     MessageBox.Show("마스터 데이터가 삭제되었습니다. (기존 배치된 좌석 데이터는 유지됩니다.)", "완료", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
             }
@@ -1900,21 +1938,26 @@ namespace SeatManagerApp
         private void InitializeGoogleFormSync()
         {
             _config = AppConfig.Load();
-            if (string.IsNullOrWhiteSpace(_config.SpreadsheetId))
-                _config.SpreadsheetId = DefaultSpreadsheetId;
+
+            // (마이그레이션) 예전 '응답 스프레드시트 ID' 칸에 값이 있었고 새 칸이 비어 있으면 한 번만 옮겨 담는다
+            if (string.IsNullOrWhiteSpace(_config.SangsangLabFormUrl) && !string.IsNullOrWhiteSpace(_config.SpreadsheetId))
+                _config.SangsangLabFormUrl = _config.SpreadsheetId;
+            if (string.IsNullOrWhiteSpace(_config.SangsangLabFormUrl))
+                _config.SangsangLabFormUrl = DefaultSpreadsheetId;
+
             if (string.IsNullOrWhiteSpace(_config.EquipmentFormUrl))
                 _config.EquipmentFormUrl = DefaultEquipmentSpreadsheetId;
             if (string.IsNullOrWhiteSpace(_config.CabinetFormUrl))
                 _config.CabinetFormUrl = DefaultCabinetSpreadsheetId;
 
-            _formsService = new GoogleFormsService(_config.ResolveServiceAccountKeyPath(), _config.SpreadsheetId);
+            string mainSheetId = GoogleFormsService.ExtractSpreadsheetId(_config.SangsangLabFormUrl);
+            _formsService = new GoogleFormsService(_config.ResolveServiceAccountKeyPath(), mainSheetId);
             _formsService.EquipmentSpreadsheetId =
                 GoogleFormsService.ExtractSpreadsheetId(_config.EquipmentFormUrl);
             _formsService.CabinetSpreadsheetId =
                 GoogleFormsService.ExtractSpreadsheetId(_config.CabinetFormUrl);
 
             // 설정 화면에 현재 값 반영
-            TxtSpreadsheetId.Text = _config.SpreadsheetId;
             TxtPollingInterval.Text = _config.PollingIntervalSeconds.ToString();
             TxtSangsangLabFormUrl.Text = _config.SangsangLabFormUrl;
             TxtCabinetFormUrl.Text = _config.CabinetFormUrl;
@@ -2064,7 +2107,6 @@ namespace SeatManagerApp
 
         private void BtnSaveSyncSettings_Click(object sender, RoutedEventArgs e)
         {
-            _config.SpreadsheetId = TxtSpreadsheetId.Text.Trim();
             _config.PollingEnabled = ChkPollingEnabled.IsChecked == true;
             _config.SangsangLabFormUrl = TxtSangsangLabFormUrl.Text.Trim();
             _config.CabinetFormUrl = TxtCabinetFormUrl.Text.Trim();
@@ -2082,14 +2124,27 @@ namespace SeatManagerApp
                 return;
             }
 
-            // 전용 폼 칸에서 응답 시트 ID를 뽑아낸다. 폼 주소를 그대로 넣으면 Sheets API로는 읽을 수 없다.
+            // 폼/전용 칸에서 응답 시트 ID를 뽑아낸다. 폼 주소를 그대로 넣으면 Sheets API로는 읽을 수 없다.
+            string mainSheetId = GoogleFormsService.ExtractSpreadsheetId(_config.SangsangLabFormUrl);
             string equipmentSheetId = GoogleFormsService.ExtractSpreadsheetId(_config.EquipmentFormUrl);
             string cabinetSheetId = GoogleFormsService.ExtractSpreadsheetId(_config.CabinetFormUrl);
+
+            if (mainSheetId.Length == 0)
+            {
+                MessageBox.Show(
+                    "상상Lab 신청 폼 URL 칸의 주소로는 시트를 읽을 수 없습니다.\n\n" +
+                    (GoogleFormsService.IsFormUrl(_config.SangsangLabFormUrl)
+                        ? "폼 편집 화면의 [응답] → [시트에서 보기]로 열리는 " : "") +
+                    "스프레드시트 주소(docs.google.com/spreadsheets/d/...)를 붙여넣어 주세요.\n\n" +
+                    "이 값이 없으면 상상Lab 신청과, 전용 시트를 지정하지 않은 캐비닛·기자재 신청을 전혀 받아올 수 없습니다.",
+                    "설정 오류", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
 
             _config.Save();
             if (_formsService != null)
             {
-                _formsService.SpreadsheetId = _config.SpreadsheetId;
+                _formsService.SpreadsheetId = mainSheetId;
                 _formsService.EquipmentSpreadsheetId = equipmentSheetId;
                 _formsService.CabinetSpreadsheetId = cabinetSheetId;
             }
@@ -2105,7 +2160,7 @@ namespace SeatManagerApp
                 if (note != null) notes.Add(note);
             }
 
-            string message = "연동 설정을 저장했습니다.";
+            string message = $"연동 설정을 저장했습니다. (메인 시트 ID: {mainSheetId})";
             if (notes.Count > 0)
             {
                 message += "\n\n" + string.Join("\n\n", notes) +
@@ -2125,7 +2180,7 @@ namespace SeatManagerApp
             if (sheetId.Length > 0)
                 return $"· {label} 신청은 별도 시트에서 받아옵니다. (시트 ID: {sheetId})";
 
-            return $"· {label} 칸의 주소로는 시트를 읽을 수 없어, {label} 신청도 위 '응답 스프레드시트 ID' 시트에서만 받아옵니다.\n" +
+            return $"· {label} 칸의 주소로는 시트를 읽을 수 없어, {label} 신청도 '상상Lab 신청 폼 URL' 시트에서만 받아옵니다.\n" +
                    "  " +
                    (GoogleFormsService.IsFormUrl(enteredUrl)
                        ? "폼 편집 화면의 [응답] → [시트에서 보기]로 열리는 "
@@ -2213,6 +2268,10 @@ namespace SeatManagerApp
                 }
 
                 RefreshApprovalViews();
+
+                // 새로 받아온 신청서(및 SourceKey)가 있으면 즉시 저장한다 —
+                // 저장하지 않으면 다음 실행 때 같은 신청서를 또 새 신청서로 받아오게 된다.
+                if (result.NewRequests.Count > 0) SaveAppState();
 
                 if (autoRejected.Count > 0)
                 {
@@ -2890,6 +2949,190 @@ namespace SeatManagerApp
             }
         }
 
+        // ================= 좌석 데이터 불러오기 (상상Labs 입실신청 응답 엑셀) =================
+        private void BtnLoadSeatData_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Filter = "Excel Files (*.xlsx)|*.xlsx|All Files (*.*)|*.*",
+                Title = "좌석 데이터 불러오기 (상상Labs 입실신청 응답 엑셀)"
+            };
+            if (dialog.ShowDialog() != true) return;
+
+            List<StudentInfo> imported;
+            try
+            {
+                imported = ParseSangsangLabResponses(dialog.FileName);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"엑셀 파일을 읽는 도중 오류가 발생했습니다: {ex.Message}",
+                    "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            if (imported.Count == 0)
+            {
+                MessageBox.Show(
+                    "불러올 학생 정보를 찾지 못했습니다.\n상상Labs 입실신청(응답) 엑셀 양식(타임스탬프·소속·이름·학번·연락처·이메일·지도교수 열)인지 확인해주세요.",
+                    "알림", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            string seasonLabel = _currentSeason != null
+                ? $"{_currentSeason.Value.Year}년 {_currentSeason.Value.Season}"
+                : "현재 시즌";
+
+            var confirm = MessageBox.Show(
+                $"{seasonLabel} 좌석 데이터를 불러온 명단 {imported.Count}명으로 교체합니다.\n" +
+                "고정된 좌석은 그대로 유지됩니다.\n\n계속하시겠습니까?",
+                "좌석데이터 불러오기", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (confirm != MessageBoxResult.Yes) return;
+
+            // 고정 좌석에 이미 앉아 있는 학번은 다시 배치하지 않는다
+            var fixedIds = _activeSeats
+                .Where(s => s.IsFixed && s.Student != null)
+                .Select(s => s.Student!.StudentId)
+                .Where(id => !string.IsNullOrEmpty(id))
+                .ToHashSet();
+
+            var queue = new Queue<StudentInfo>(
+                imported.Where(st => string.IsNullOrEmpty(st.StudentId) || !fixedIds.Contains(st.StudentId)));
+
+            // 고정이 아닌 좌석(기둥 제외)을 앞에서부터 순서대로 채우고, 남는 좌석은 비운다
+            int placed = 0;
+            foreach (var seat in _activeSeats.OrderBy(s => s.SeatNumber))
+            {
+                if (seat.IsPillar || seat.IsFixed) continue;
+
+                if (queue.Count == 0)
+                {
+                    seat.Student = null;
+                    continue;
+                }
+
+                var st = queue.Dequeue();
+                seat.Student = st;
+                if (st.Department.Contains("대학원")) seat.IsFixed = true; // 대학원생 좌석은 고정
+                placed++;
+            }
+
+            RenderSeatGrid();
+            SaveSeatCache();
+
+            // 불러온 학생을 마스터 학생 데이터(데이터 관리 탭)에도 반영한다
+            int addedToMaster = 0;
+            int updatedInMaster = 0;
+            foreach (var st in imported)
+            {
+                var master = !string.IsNullOrEmpty(st.StudentId)
+                    ? _masterStudents.FirstOrDefault(m => m.StudentId == st.StudentId)
+                    : _masterStudents.FirstOrDefault(m => m.Name == st.Name && m.Email == st.Email);
+
+                if (master == null)
+                {
+                    _masterStudents.Add(st.Clone());
+                    addedToMaster++;
+                    continue;
+                }
+
+                // 이미 있으면 비어 있던 항목만 채워 넣는다 (기존 값은 덮어쓰지 않는다)
+                bool changed = false;
+                if (string.IsNullOrWhiteSpace(master.Name) && !string.IsNullOrWhiteSpace(st.Name)) { master.Name = st.Name; changed = true; }
+                if (string.IsNullOrWhiteSpace(master.Department) && !string.IsNullOrWhiteSpace(st.Department)) { master.Department = st.Department; changed = true; }
+                if (string.IsNullOrWhiteSpace(master.Advisor) && !string.IsNullOrWhiteSpace(st.Advisor)) { master.Advisor = st.Advisor; changed = true; }
+                if (string.IsNullOrWhiteSpace(master.Email) && !string.IsNullOrWhiteSpace(st.Email)) { master.Email = st.Email; changed = true; }
+                if (changed) updatedInMaster++;
+            }
+
+            if (addedToMaster > 0 || updatedInMaster > 0)
+            {
+                GridMasterStudents.ItemsSource = null;
+                GridMasterStudents.ItemsSource = _masterStudents;
+            }
+
+            SaveAppState();
+            UpdateAlertBadges();
+
+            string leftover = queue.Count > 0
+                ? $"\n\n좌석 수보다 {queue.Count}명이 많아 배치되지 못했습니다."
+                : "";
+            string masterMsg = $"\n학생 데이터: 신규 {addedToMaster}명 추가"
+                + (updatedInMaster > 0 ? $", {updatedInMaster}명 정보 보완" : "");
+            MessageBox.Show($"{seasonLabel} 좌석에 {placed}명을 배치했습니다.{masterMsg}{leftover}",
+                "불러오기 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        /// <summary>
+        /// 상상Labs(U301) 입실신청 구글폼 응답 엑셀을 읽어 학생 목록으로 만든다.
+        /// 열 순서: A 타임스탬프 / B 신청공간 / C 소속 / D 이름 / E 학번 / F 연락처 / G 이메일 / H 지도교수 / I 계획서 / J 기타.
+        /// </summary>
+        private static List<StudentInfo> ParseSangsangLabResponses(string path)
+        {
+            var rows = MiniExcelLibs.MiniExcel.Query(path).ToList();
+            var result = new List<StudentInfo>();
+            var seenIds = new HashSet<string>();
+
+            foreach (IDictionary<string, object> row in rows)
+            {
+                var v = row.Values.ToList();
+                string Cell(int i) => i < v.Count ? (v[i]?.ToString()?.Trim() ?? string.Empty) : string.Empty;
+
+                string space = Cell(1);   // B
+                string dept = Cell(2);    // C
+                string name = Cell(3);    // D
+                string idRaw = Cell(4);   // E
+                string email = Cell(6);   // G
+                string advisor = Cell(7); // H
+
+                // 헤더 행 / 안내 문구 행 걸러내기
+                if (name.Contains("이름을 작성") || dept.Contains("소속을 작성") ||
+                    idRaw.Contains("학번") || space.Contains("공간을 선택"))
+                    continue;
+
+                string id = NormalizeStudentId(v.Count > 4 ? v[4] : null);
+                if (string.IsNullOrWhiteSpace(name) && string.IsNullOrWhiteSpace(id))
+                    continue;
+
+                // 상상Labs 이외의 응답이 섞여 있으면 건너뛴다 (공간 값이 비어 있으면 통과)
+                if (!string.IsNullOrEmpty(space) && !space.Contains("상상") && !space.Contains("U301"))
+                    continue;
+
+                if (!string.IsNullOrEmpty(id) && !seenIds.Add(id))
+                    continue; // 같은 학번 중복 제거 (마지막이 아니라 첫 응답 유지)
+
+                advisor = advisor.Replace("교수님", "").Replace("교수", "").Trim();
+
+                result.Add(new StudentInfo
+                {
+                    StudentId = id,
+                    Name = name,
+                    Department = string.IsNullOrWhiteSpace(dept) ? "소프트웨어전공" : dept,
+                    Email = email,
+                    Advisor = advisor
+                });
+            }
+
+            return result;
+        }
+
+        /// <summary>학번 셀을 문자열로 정규화한다. 숫자형(2.02e7 등)으로 들어와도 정수 학번으로 되돌린다.</summary>
+        private static string NormalizeStudentId(object? v)
+        {
+            if (v == null) return string.Empty;
+            if (v is double d) return ((long)Math.Round(d)).ToString();
+
+            string s = v.ToString()?.Trim() ?? string.Empty;
+            if (s.Length == 0) return string.Empty;
+
+            if ((s.Contains('E') || s.Contains('e') || s.Contains('.')) &&
+                double.TryParse(s, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out double dd))
+                return ((long)Math.Round(dd)).ToString();
+
+            return s;
+        }
+
         private void BtnImportDashboardExcel_Click(object sender, RoutedEventArgs e)
         {
             var occupiedSeats = _activeSeats.Where(s => s.Student != null).OrderBy(s => s.SeatNumber).ToList();
@@ -3237,6 +3480,7 @@ namespace SeatManagerApp
 
                     GridMasterStudents.ItemsSource = null;
                     GridMasterStudents.ItemsSource = _masterStudents;
+                    SaveAppState();
                     MessageBox.Show($"엑셀 파일로부터 {importedCount}명의 마스터 학생 정보를 등록했습니다.", "가져오기 성공", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
                 catch (Exception ex)
@@ -3260,6 +3504,7 @@ namespace SeatManagerApp
                 _masterStudents.Clear();
                 GridMasterStudents.ItemsSource = null;
                 GridMasterStudents.ItemsSource = _masterStudents;
+                SaveAppState();
                 MessageBox.Show("모든 학생 정보가 삭제되었습니다.", "삭제 완료", MessageBoxButton.OK, MessageBoxImage.Information);
             }
         }
@@ -3460,36 +3705,66 @@ namespace SeatManagerApp
 
             if (GridStudentSelector.SelectedItem is StudentInfo selected && _currentEditingSeat != null)
             {
-                // Check duplicate seat assignment and remove from old seat
-                var duplicateSeat = _activeSeats.FirstOrDefault(s => s.Student != null && s.Student.StudentId == selected.StudentId && s.SeatNumber != _currentEditingSeat.SeatNumber);
-                if (duplicateSeat != null)
+                var targetSeat = _currentEditingSeat;
+
+                // 고른 학생이 지금 앉아 있는 다른 좌석 (없으면 null)
+                var sourceSeat = _activeSeats.FirstOrDefault(s =>
+                    s.Student != null && s.Student.StudentId == selected.StudentId && s.SeatNumber != targetSeat.SeatNumber);
+
+                // 이미 이 좌석에 그 학생이 앉아 있으면 할 일이 없다
+                if (sourceSeat == null && targetSeat.Student != null && targetSeat.Student.StudentId == selected.StudentId)
                 {
-                    duplicateSeat.Student = null;
-                    duplicateSeat.IsFixed = false;
+                    ModalStudentListSelector.Visibility = Visibility.Collapsed;
+                    return;
                 }
 
-                // Assign selected student to current seat (Cloned copy)
-                _currentEditingSeat.Student = selected.Clone();
+                // 대상 좌석에 원래 있던 학생 (없으면 null) — 삭제하지 않고 자리를 맞바꾼다
+                var occupant = targetSeat.Student;
 
-                // Check graduate
-                if (_currentEditingSeat.Student.Department.Contains("대학원"))
+                if (occupant != null)
                 {
-                    _currentEditingSeat.IsFixed = true;
+                    string occName = string.IsNullOrWhiteSpace(occupant.Name) ? occupant.StudentId : occupant.Name;
+                    string ask = sourceSeat != null
+                        ? $"{targetSeat.SeatNumber}번 좌석에는 {occName} 학생이 있습니다.\n\n" +
+                          $"{selected.Name} 학생과 자리를 맞바꿀까요?\n" +
+                          $"→ {selected.Name}: {sourceSeat.SeatNumber}번 → {targetSeat.SeatNumber}번 / {occName}: {targetSeat.SeatNumber}번 → {sourceSeat.SeatNumber}번"
+                        : $"{targetSeat.SeatNumber}번 좌석에는 {occName} 학생이 있습니다.\n\n" +
+                          $"{occName} 학생을 빼고 {selected.Name} 학생을 배정할까요?";
+
+                    if (MessageBox.Show(ask, "좌석 사용 중", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+                        return;
                 }
+
+                // 옮겨 갈 실제 인스턴스 — 이미 앉아 있었다면 그 자리에 있던 객체를 그대로 옮긴다
+                var movingIn = sourceSeat?.Student ?? selected.Clone();
+
+                if (sourceSeat != null)
+                {
+                    // 원래 있던 학생을 고른 학생의 옛 자리로 (양쪽 다 있으면 맞교환, 비어 있으면 이동)
+                    sourceSeat.Student = occupant;
+                    sourceSeat.IsFixed = occupant != null && occupant.Department.Contains("대학원");
+                }
+
+                targetSeat.Student = movingIn;
+                targetSeat.IsFixed = movingIn.Department.Contains("대학원");
 
                 // Update UI fields in parent modal
-                TxtModalName.Text = selected.Name;
-                TxtModalId.Text = selected.StudentId;
-                TxtModalDept.Text = selected.Department;
-                TxtModalAdvisor.Text = selected.Advisor;
-                TxtModalEmail.Text = selected.Email;
-                ItemsModalAttendance.ItemsSource = selected.Attendance;
+                TxtModalName.Text = movingIn.Name;
+                TxtModalId.Text = movingIn.StudentId;
+                TxtModalDept.Text = movingIn.Department;
+                TxtModalAdvisor.Text = movingIn.Advisor;
+                TxtModalEmail.Text = movingIn.Email;
+                ItemsModalAttendance.ItemsSource = movingIn.Attendance;
 
                 RenderSeatGrid();
                 UpdateAlertBadges();
 
                 ModalStudentListSelector.Visibility = Visibility.Collapsed;
-                MessageBox.Show($"학생 '{selected.Name}'이(가) 좌석에 배정되었습니다. '저장'을 누르면 최종 적용됩니다.", "학생 배정 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+
+                string msg = (occupant != null && sourceSeat != null)
+                    ? $"{selected.Name} 학생과 {(string.IsNullOrWhiteSpace(occupant.Name) ? occupant.StudentId : occupant.Name)} 학생의 자리를 맞바꿨습니다. '저장'을 누르면 최종 적용됩니다."
+                    : $"학생 '{selected.Name}'이(가) 좌석에 배정되었습니다. '저장'을 누르면 최종 적용됩니다.";
+                MessageBox.Show(msg, "좌석 배정", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             else
             {

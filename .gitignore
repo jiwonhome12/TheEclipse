@@ -179,6 +179,9 @@ DocProject/Help/html
 # Click-Once directory
 publish/
 
+# Inno Setup 컴파일 결과물 (installer/SeatManagerApp.iss로 다시 만들 수 있음)
+installer_output/
+
 # Publish Web Output
 *.[Pp]ublish.xml
 *.azurePubxml
