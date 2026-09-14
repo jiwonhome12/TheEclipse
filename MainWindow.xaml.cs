@@ -121,6 +121,9 @@ namespace SeatManagerApp
             // 학생 마스터·승인 신청서·대여·캐비닛·메모 등 나머지 데이터도 불러온다
             LoadAppState();
 
+            // 얼굴인식 출결 시스템이 처음부터 최신 명단을 읽어갈 수 있도록 시작할 때도 한 번 내보낸다
+            FaceIntegration.ExportRoster(_masterStudents);
+
             this.Closing += MainWindow_Closing;
 
             // Update date display
@@ -476,6 +479,9 @@ namespace SeatManagerApp
                 Memos = _memos.ToList()
             };
             state.Save();
+
+            // 얼굴인식 출결 시스템(별도 프로그램)이 읽어갈 학생 명단도 같이 갱신한다
+            FaceIntegration.ExportRoster(_masterStudents);
         }
 
         private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
@@ -3686,6 +3692,38 @@ namespace SeatManagerApp
                     MessageBox.Show($"엑셀 파일을 읽는 도중 오류가 발생했습니다: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
             }
+        }
+
+        // ================= 얼굴인식 출결 기록 (insightface-attendance 연동) =================
+        private void BtnFaceAttendance_Click(object sender, RoutedEventArgs e)
+        {
+            LoadFaceAttendanceGrid();
+            ModalFaceAttendance.Visibility = Visibility.Visible;
+        }
+
+        private void BtnRefreshFaceAttendance_Click(object sender, RoutedEventArgs e)
+        {
+            LoadFaceAttendanceGrid();
+        }
+
+        private void BtnCloseFaceAttendance_Click(object sender, RoutedEventArgs e)
+        {
+            ModalFaceAttendance.Visibility = Visibility.Collapsed;
+        }
+
+        /// <summary>얼굴인식 프로그램이 써 둔 attendance.json을 읽어 최신순으로 보여준다.</summary>
+        private void LoadFaceAttendanceGrid()
+        {
+            var records = FaceIntegration.LoadAttendance()
+                .OrderByDescending(r => r.Date)
+                .ThenBy(r => r.Name)
+                .ToList();
+
+            GridFaceAttendance.ItemsSource = records;
+
+            TxtFaceAttendanceInfo.Text = records.Count > 0
+                ? $"얼굴인식 프로그램(insightface-attendance)이 기록한 출근/퇴근 시간입니다. 총 {records.Count}건."
+                : "아직 기록된 출결 데이터가 없습니다. (파일 위치: " + FaceIntegration.AttendancePath + ")";
         }
 
         private void BtnImportDataManageExcel_Click(object sender, RoutedEventArgs e)

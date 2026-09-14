@@ -1133,7 +1133,8 @@
                             </Button>
                             <CheckBox x:Name="ChkShowAllSeasonStudents" Content="지난 시즌까지 보기" VerticalAlignment="Center" FontSize="12" Margin="0,0,12,0"
                                       Checked="ChkShowAllSeasonStudents_Changed" Unchecked="ChkShowAllSeasonStudents_Changed"/>
-                            <Button x:Name="BtnImportDataManageExcel" Content="📥 엑셀 가져오기" Style="{StaticResource ActionBarBtn}" Padding="15,6" Click="BtnImportDataManageExcel_Click"/>
+                            <Button x:Name="BtnImportDataManageExcel" Content="📥 엑셀 가져오기" Style="{StaticResource ActionBarBtn}" Padding="15,6" Click="BtnImportDataManageExcel_Click" Margin="0,0,8,0"/>
+                            <Button x:Name="BtnFaceAttendance" Content="🎥 얼굴인식 출결 기록" Style="{StaticResource ActionBarBtn}" Padding="15,6" Click="BtnFaceAttendance_Click"/>
                             <Button x:Name="BtnDeleteAllStudents" Content="🗑️ 전체 삭제" Style="{StaticResource ActionBarBtn}" Padding="15,6" Click="BtnDeleteAllStudents_Click" Background="#EF4444" Foreground="White" BorderBrush="#DC2626" Margin="8,0,0,0"/>
                         </StackPanel>
                     </Border>
@@ -1565,6 +1566,44 @@
                 </Grid>
             </Border>
         </Grid>
+        <!-- ================= 얼굴인식 출결 기록 모달 ================= -->
+        <Grid x:Name="ModalFaceAttendance" Grid.ColumnSpan="2" Background="#80000000" Visibility="Collapsed">
+            <Border Background="White" Width="750" Height="520" CornerRadius="20" Padding="35" VerticalAlignment="Center" HorizontalAlignment="Center">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="25" ShadowDepth="0" Color="Black" Opacity="0.25"/>
+                </Border.Effect>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <Button Background="Transparent" BorderThickness="0" Cursor="Hand" Click="BtnCloseFaceAttendance_Click" HorizontalAlignment="Right" VerticalAlignment="Top" Panel.ZIndex="10">
+                        <TextBlock Text="✕" FontSize="20" Foreground="#111827"/>
+                    </Button>
+
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,4">
+                        <TextBlock Text="얼굴인식 출결 기록" FontSize="18" FontWeight="Bold" Foreground="#111827"/>
+                        <Button Content="🔄 새로고침" Style="{StaticResource ActionBarBtn}" Padding="12,5" Margin="15,0,0,0" Click="BtnRefreshFaceAttendance_Click"/>
+                    </StackPanel>
+                    <TextBlock Grid.Row="1" x:Name="TxtFaceAttendanceInfo" Text="얼굴인식 프로그램(insightface-attendance)이 기록한 출근/퇴근 시간입니다." FontSize="11" Foreground="#6B7280" Margin="0,0,0,15" TextWrapping="Wrap"/>
+
+                    <Border Grid.Row="2" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="8" Background="#F9FAFB">
+                        <DataGrid x:Name="GridFaceAttendance" AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column" GridLinesVisibility="Horizontal" RowHeight="35" BorderThickness="0" Background="Transparent">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="학번" Binding="{Binding StudentId}" Width="110" IsReadOnly="True"/>
+                                <DataGridTextColumn Header="이름" Binding="{Binding Name}" Width="90" IsReadOnly="True"/>
+                                <DataGridTextColumn Header="날짜" Binding="{Binding Date}" Width="110" IsReadOnly="True"/>
+                                <DataGridTextColumn Header="출근" Binding="{Binding CheckIn}" Width="100" IsReadOnly="True"/>
+                                <DataGridTextColumn Header="퇴근" Binding="{Binding CheckOut}" Width="*" MinWidth="100" IsReadOnly="True"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Border>
+                </Grid>
+            </Border>
+        </Grid>
+
         <!-- ================= CABINET DETAIL MODAL OVERLAY ================= -->
         <Grid x:Name="ModalCabinetDetails" Grid.ColumnSpan="2" Background="#80000000" Visibility="Collapsed" Panel.ZIndex="100">
             <Border Background="White" Width="600" Height="400" CornerRadius="20" Padding="35" VerticalAlignment="Center" HorizontalAlignment="Center">
