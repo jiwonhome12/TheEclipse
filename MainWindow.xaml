@@ -1,4 +1,4 @@
-<Window x:Class="SeatManagerApp.MainWindow"
+﻿<Window x:Class="SeatManagerApp.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="동서대학교 좌석 및 기자재 관리 시스템" Height="900" Width="1600"
@@ -367,7 +367,6 @@
                                 <Button Content="랜덤 배정" Style="{StaticResource ActionBarBtn}" Margin="0,0,8,0" Click="BtnRandomAllocation_Click"/>
                                 <Button x:Name="BtnSeatFixMode" Content="좌석 고정 모드" Style="{StaticResource ActionBarBtn}" Margin="0,0,8,0" Click="BtnSeatFixMode_Click"/>
                                 <Button x:Name="BtnSeatDeleteMode" Content="좌석 데이터 삭제" Style="{StaticResource ActionBarBtn}" Margin="0,0,8,0" Click="BtnSeatDeleteMode_Click"/>
-                                <Button x:Name="BtnSeatEditMode" Content="🔀 좌석 수정 모드" Style="{StaticResource ActionBarBtn}" Margin="0,0,8,0" Click="BtnSeatEditMode_Click"/>
                                 <Button x:Name="BtnLoadSeatData" Content="📥 좌석데이터 불러오기" Style="{StaticResource ActionBarBtn}" Margin="0,0,8,0" Click="BtnLoadSeatData_Click"/>
                                 <Button x:Name="BtnMaskSeatInfo" Content="🔒 정보 가리기" Style="{StaticResource ActionBarBtn}" Margin="0,0,8,0" Click="BtnMaskSeatInfo_Click"/>
                                 <Button x:Name="BtnImportDashboardExcel" Content="📤 엑셀 내보내기" Style="{StaticResource ActionBarBtn}" Click="BtnImportDashboardExcel_Click"/>
@@ -954,15 +953,29 @@
                                 <Button x:Name="BtnCabinetNext" Content="▶" Width="40" Height="40" Padding="0" Click="BtnCabinetNext_Click" Style="{StaticResource ActionBarBtn}" FontWeight="Bold"/>
                             </StackPanel>
 
-                            <!-- Upper Cabinet Block (1-24) -->
-                            <Border x:Name="BorderCabinetBlock1" BorderBrush="#D1D5DB" BorderThickness="1" Background="White" Padding="10" CornerRadius="8" Visibility="Visible">
-                                <UniformGrid x:Name="GridCabinetBlock1" Columns="8" Rows="3" Width="900" Height="345"/>
-                            </Border>
+                            <Grid x:Name="GridCabinetBlocks" Margin="52,0">
+                                <!-- Upper Cabinet Block (1-24) -->
+                                <Border x:Name="BorderCabinetBlock1" BorderBrush="#D1D5DB" BorderThickness="1" Background="White" Padding="10" CornerRadius="8" Visibility="Visible">
+                                    <UniformGrid x:Name="GridCabinetBlock1" Columns="8" Rows="3" Width="900" Height="345"/>
+                                </Border>
 
-                            <!-- Lower Cabinet Block (25-48) -->
-                            <Border x:Name="BorderCabinetBlock2" BorderBrush="#D1D5DB" BorderThickness="1" Background="White" Padding="10" CornerRadius="8" Visibility="Collapsed">
-                                <UniformGrid x:Name="GridCabinetBlock2" Columns="8" Rows="3" Width="900" Height="345"/>
-                            </Border>
+                                <!-- Lower Cabinet Block (25-48) -->
+                                <Border x:Name="BorderCabinetBlock2" BorderBrush="#D1D5DB" BorderThickness="1" Background="White" Padding="10" CornerRadius="8" Visibility="Collapsed">
+                                    <UniformGrid x:Name="GridCabinetBlock2" Columns="8" Rows="3" Width="900" Height="345"/>
+                                </Border>
+
+                                <!-- 드래그 중 페이지가 넘어가는 영역 (투명한 파란색, 드래그할 때만 보인다) -->
+                                <Border x:Name="CabinetEdgeZoneLeft" HorizontalAlignment="Left" Margin="-52,0,0,0" Width="48" Visibility="Collapsed"
+                                        IsHitTestVisible="False" Background="#802563EB" BorderBrush="#2563EB" BorderThickness="0,0,2,0"
+                                        CornerRadius="8,0,0,8" Panel.ZIndex="10">
+                                    <TextBlock Text="◀" FontSize="22" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <Border x:Name="CabinetEdgeZoneRight" HorizontalAlignment="Right" Margin="0,0,-52,0" Width="48" Visibility="Collapsed"
+                                        IsHitTestVisible="False" Background="#802563EB" BorderBrush="#2563EB" BorderThickness="2,0,0,0"
+                                        CornerRadius="0,8,8,0" Panel.ZIndex="10">
+                                    <TextBlock Text="▶" FontSize="22" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                            </Grid>
                         </StackPanel>
 
                         <!-- Bottom Status Counters -->
@@ -1653,6 +1666,12 @@
                         <!-- Period -->
                         <TextBlock Grid.Row="2" Grid.Column="0" Text="대여 기간 : " FontSize="22" FontWeight="Bold" Foreground="#111827"/>
                         <TextBox x:Name="TxtCabinetModalPeriod" Grid.Row="2" Grid.Column="1" FontSize="22" FontWeight="Bold" Foreground="#111827" Background="Transparent" BorderThickness="0" IsReadOnly="True"/>
+                        <!-- 정보 수정 중에는 글자로 적지 않고 캘린더에서 시작일·종료일을 고른다 -->
+                        <StackPanel x:Name="PanelCabinetPeriodPicker" Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Visibility="Collapsed" VerticalAlignment="Center">
+                            <DatePicker x:Name="DpCabinetStart" Width="150" FontSize="16" VerticalContentAlignment="Center" ToolTip="대여 시작일"/>
+                            <TextBlock Text=" ~ " FontSize="20" FontWeight="Bold" Foreground="#111827" VerticalAlignment="Center" Margin="6,0"/>
+                            <DatePicker x:Name="DpCabinetEnd" Width="150" FontSize="16" VerticalContentAlignment="Center" ToolTip="대여 종료일"/>
+                        </StackPanel>
                     </Grid>
 
                     <!-- Save Button (Only visible during edit) -->

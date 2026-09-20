@@ -68,11 +68,13 @@ namespace SeatManagerApp
         // App Modes
         private bool _isSeatFixMode = false;
         private bool _isSeatDeleteMode = false;
-        private bool _isSeatEditMode = false;
         private bool _isCabinetFixed = false;
 
-        /// <summary>좌석 수정 모드에서 드래그를 시작할 수도 있는 좌석(마우스를 누른 시점의 좌석).</summary>
+        /// <summary>드래그를 시작할 수 있는 좌석(마우스를 누른 시점, 학생이 앉아 있는 좌석).</summary>
         private Seat? _seatDragCandidate;
+
+        /// <summary>마우스를 누른 좌석 — 드래그 없이 떼면 클릭으로 보고 상세 창을 연다.</summary>
+        private Seat? _seatPressed;
         private Point _seatDragStartPoint;
 
         /// <summary>대시보드 좌석에서 학번 가운데 4자리와 이름 가운데 한 글자를 '*'로 가릴지 여부.</summary>
@@ -993,6 +995,7 @@ namespace SeatManagerApp
 
                 seatCard.Child = cardGrid;
                 seatCard.MouseDown += SeatCard_MouseDown;
+                seatCard.MouseLeftButtonUp += SeatCard_MouseUp;
                 seatCard.PreviewMouseLeftButtonDown += SeatCard_DragCandidate;
                 seatCard.PreviewMouseMove += SeatCard_DragMove;
                 seatCard.AllowDrop = true;
@@ -1060,46 +1063,37 @@ namespace SeatManagerApp
                     bool anySelected = _activeSeats.Any(s => s.IsSelected);
                     BtnDeleteSelected.Visibility = anySelected ? Visibility.Visible : Visibility.Collapsed;
                 }
-                else if (_isSeatEditMode)
-                {
-                    // 좌석 수정 모드에서는 클릭 자체로는 아무것도 하지 않는다 — 드래그로만 자리를 옮긴다.
-                }
-                else
-                {
-                    // Regular Mode: Show student details or add student
-                    ShowStudentDetailsModal(seat);
-                }
+                // 일반 상태의 클릭(상세 창 열기)은 드래그와 구분하기 위해 마우스를 뗄 때(SeatCard_MouseUp) 처리한다.
             }
         }
 
-        // ================= 좌석 수정 모드 (드래그 앤 드롭으로 자리 이동/교체) =================
-        private void BtnSeatEditMode_Click(object sender, RoutedEventArgs e)
+        /// <summary>일반 상태에서 드래그 없이 눌렀다 뗐을 때만 상세 창을 연다.</summary>
+        private void SeatCard_MouseUp(object sender, MouseButtonEventArgs e)
         {
-            if (_isSeatFixMode)
+            if (!SeatDragEnabled) return;
+            if (sender is Border border && border.Tag is Seat seat && ReferenceEquals(_seatPressed, seat))
             {
-                _isSeatFixMode = false;
-                BtnSeatFixMode.Content = "좌석 고정 모드";
-                BtnSeatFixMode.Background = Brushes.White;
-                foreach (var s in _activeSeats) s.IsSelected = false;
+                _seatPressed = null;
+                _seatDragCandidate = null;
+                ShowStudentDetailsModal(seat);
             }
-            if (_isSeatDeleteMode)
-            {
-                _isSeatDeleteMode = false;
-                BtnDeleteSelected.Visibility = Visibility.Collapsed;
-                BtnSeatDeleteMode.Content = "좌석 데이터 삭제";
-            }
-
-            _isSeatEditMode = !_isSeatEditMode;
-            BtnSeatEditMode.Content = _isSeatEditMode ? "✅ 좌석 수정 종료" : "🔀 좌석 수정 모드";
-            BtnSeatEditMode.Background = _isSeatEditMode
-                ? new SolidColorBrush(Color.FromRgb(191, 219, 254)) // 하늘색으로 활성 표시
-                : Brushes.White;
-
-            _seatDragCandidate = null;
-            RenderSeatGrid();
         }
 
-        /// <summary>좌석 카드를 누른 시점 — 학생이 있는 좌석이면 드래그 시작 후보로 기록해 둔다.</summary>
+        // ================= 좌석 드래그 앤 드롭 (상시: 고정/삭제 모드가 아닐 때) =================
+        /// <summary>좌석 고정 모드·삭제 모드가 아닐 때는 언제든 좌석을 끌어서 옮길 수 있다.</summary>
+        private bool SeatDragEnabled => !_isSeatFixMode && !_isSeatDeleteMode;
+
+        private static bool IsSeatLocked(Seat seat) =>
+            seat.IsFixed || (seat.Student != null && seat.Student.Department.Contains("대학원"));
+
+        private void ShowFixedSeatPopup()
+        {
+            MessageBox.Show(
+                "고정된 좌석은 이동하거나 교체할 수 없습니다.\n" +
+                "자리를 옮기려면 먼저 [좌석 고정 모드]에서 고정을 해제해 주세요.",
+                "고정된 좌석", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+
         /// <summary>좌석 카드의 기본 배경/테두리를 seat 상태(선택·고정·회색줄)에 맞춰 다시 계산해 적용한다.</summary>
         private static void ApplySeatCardDefaultStyle(Border seatCard, Seat seat, bool isGray)
         {
@@ -1125,19 +1119,23 @@ namespace SeatManagerApp
 
         private void SeatCard_DragCandidate(object sender, MouseButtonEventArgs e)
         {
-            if (!_isSeatEditMode) return;
-            if (sender is Border border && border.Tag is Seat seat && seat.Student != null && !seat.IsPillar)
+            _seatPressed = null;
+            _seatDragCandidate = null;
+            if (!SeatDragEnabled) return;
+
+            if (sender is Border border && border.Tag is Seat seat)
             {
-                _seatDragCandidate = seat;
+                _seatPressed = seat; // 클릭인지 드래그인지는 이후 움직임/마우스 뗌으로 구분한다
                 _seatDragStartPoint = e.GetPosition(null);
+                if (seat.Student != null && !seat.IsPillar) _seatDragCandidate = seat;
             }
         }
 
         /// <summary>누른 채로 일정 거리 이상 움직이면 실제 드래그를 시작한다. 드래그 중엔 원래 좌석을 흐리게 표시해 "지금 옮기고 있다"는 걸 보여준다.</summary>
         private void SeatCard_DragMove(object sender, MouseEventArgs e)
         {
-            if (!_isSeatEditMode || _seatDragCandidate == null) return;
-            if (e.LeftButton != MouseButtonState.Pressed) { _seatDragCandidate = null; return; }
+            if (!SeatDragEnabled || _seatPressed == null) return;
+            if (e.LeftButton != MouseButtonState.Pressed) { _seatPressed = null; _seatDragCandidate = null; return; }
             if (sender is not Border border) return;
 
             Point pos = e.GetPosition(null);
@@ -1145,8 +1143,18 @@ namespace SeatManagerApp
                 Math.Abs(pos.Y - _seatDragStartPoint.Y) < SystemParameters.MinimumVerticalDragDistance)
                 return;
 
+            // 여기부터는 클릭이 아니라 드래그다 — 마우스를 떼도 상세 창이 열리지 않게 한다
             var seat = _seatDragCandidate;
-            _seatDragCandidate = null; // 같은 드래그를 두 번 시작하지 않도록
+            _seatPressed = null;
+            _seatDragCandidate = null;
+            if (seat == null) return; // 빈 좌석은 끌 게 없다
+
+            // 고정된 좌석은 옮기지 않는다 (고정이 풀리지 않도록 막고 안내만 띄운다)
+            if (IsSeatLocked(seat))
+            {
+                ShowFixedSeatPopup();
+                return;
+            }
 
             border.Opacity = 0.3; // 지금 들고 있는 좌석은 흐리게
             border.Cursor = Cursors.Hand;
@@ -1165,23 +1173,24 @@ namespace SeatManagerApp
         /// <summary>드래그가 이 좌석 위로 들어오면 놓을 수 있는 자리인지 표시한다.</summary>
         private void SeatCard_DragOver(object sender, DragEventArgs e)
         {
-            bool canDrop = _isSeatEditMode && e.Data.GetDataPresent(typeof(Seat)) &&
+            bool canDrop = SeatDragEnabled && e.Data.GetDataPresent(typeof(Seat)) &&
                            sender is Border b && b.Tag is Seat s && !s.IsPillar &&
                            !ReferenceEquals(e.Data.GetData(typeof(Seat)), s);
             e.Effects = canDrop ? DragDropEffects.Move : DragDropEffects.None;
             e.Handled = true;
         }
 
-        /// <summary>마우스가 올라온 좌석 카드를 파란 테두리로 강조해서 "여기에 놓인다"를 분명히 보여준다.</summary>
+        /// <summary>마우스가 올라온 좌석 카드를 파란 테두리로 강조해서 "여기에 놓인다"를 분명히 보여준다. 고정 좌석은 빨간색.</summary>
         private void SeatCard_DragEnter(object sender, DragEventArgs e)
         {
-            if (!_isSeatEditMode || !e.Data.GetDataPresent(typeof(Seat))) return;
+            if (!SeatDragEnabled || !e.Data.GetDataPresent(typeof(Seat))) return;
             if (sender is Border border && border.Tag is Seat seat && !seat.IsPillar &&
                 !ReferenceEquals(e.Data.GetData(typeof(Seat)), seat))
             {
-                border.BorderBrush = new SolidColorBrush(Color.FromRgb(37, 99, 235)); // 진한 파랑
+                bool locked = IsSeatLocked(seat);
+                border.BorderBrush = new SolidColorBrush(locked ? Color.FromRgb(239, 68, 68) : Color.FromRgb(37, 99, 235));
                 border.BorderThickness = new Thickness(3);
-                border.Background = new SolidColorBrush(Color.FromRgb(219, 234, 254)); // 옅은 파랑
+                border.Background = new SolidColorBrush(locked ? Color.FromRgb(254, 226, 226) : Color.FromRgb(219, 234, 254));
             }
         }
 
@@ -1197,13 +1206,21 @@ namespace SeatManagerApp
         /// <summary>다른 좌석 카드 위에 놓았을 때 — 자리를 옮기거나(빈 자리) 맞바꾼다(학생이 있는 자리).</summary>
         private void SeatCard_Drop(object sender, DragEventArgs e)
         {
-            if (!_isSeatEditMode) return;
+            if (!SeatDragEnabled) return;
             if (!e.Data.GetDataPresent(typeof(Seat))) return;
             if (sender is not Border border || border.Tag is not Seat targetSeat) return;
             if (targetSeat.IsPillar) return;
 
             var sourceSeat = (Seat)e.Data.GetData(typeof(Seat));
             if (sourceSeat == targetSeat || sourceSeat.Student == null) return;
+
+            // 고정된 좌석 위로는 옮길 수 없다 — 고정이 풀리지 않게 그대로 두고 안내만 띄운다
+            if (IsSeatLocked(sourceSeat) || IsSeatLocked(targetSeat))
+            {
+                ApplySeatCardDefaultStyle(border, targetSeat, targetSeat.SeatNumber >= 43);
+                ShowFixedSeatPopup();
+                return;
+            }
 
             var moving = sourceSeat.Student;
             var occupant = targetSeat.Student;
@@ -1216,14 +1233,16 @@ namespace SeatManagerApp
                     $"{targetSeat.SeatNumber}번 좌석에는 {occName} 학생이 있습니다.\n" +
                     $"{movingName} 학생과 자리를 맞바꿀까요?",
                     "좌석 맞바꾸기", MessageBoxButton.YesNo, MessageBoxImage.Question);
-                if (confirm != MessageBoxResult.Yes) return;
+                if (confirm != MessageBoxResult.Yes)
+                {
+                    ApplySeatCardDefaultStyle(border, targetSeat, targetSeat.SeatNumber >= 43);
+                    return;
+                }
             }
 
+            // 위에서 고정 좌석은 걸러냈으므로 두 좌석 모두 고정이 아니다 (IsFixed 값은 건드리지 않는다)
             sourceSeat.Student = occupant;
-            sourceSeat.IsFixed = occupant != null && occupant.Department.Contains("대학원");
-
             targetSeat.Student = moving;
-            targetSeat.IsFixed = moving.Department.Contains("대학원");
 
             MarkStudentActiveThisSeason(moving);
             MarkStudentActiveThisSeason(occupant);
@@ -1331,12 +1350,6 @@ namespace SeatManagerApp
                 _isSeatDeleteMode = false;
                 BtnDeleteSelected.Visibility = Visibility.Collapsed;
                 BtnSeatDeleteMode.Content = "좌석 데이터 삭제";
-            }
-            if (_isSeatEditMode)
-            {
-                _isSeatEditMode = false;
-                BtnSeatEditMode.Content = "🔀 좌석 수정 모드";
-                BtnSeatEditMode.Background = Brushes.White;
             }
 
             if (!_isSeatFixMode)
@@ -1536,12 +1549,6 @@ namespace SeatManagerApp
                 _isSeatFixMode = false;
                 BtnSeatFixMode.Content = "좌석 고정 모드";
                 BtnSeatFixMode.Background = Brushes.White;
-            }
-            if (_isSeatEditMode)
-            {
-                _isSeatEditMode = false;
-                BtnSeatEditMode.Content = "🔀 좌석 수정 모드";
-                BtnSeatEditMode.Background = Brushes.White;
             }
 
             // Create context menu to choose between selection delete and all delete
@@ -2882,15 +2889,250 @@ namespace SeatManagerApp
 
             border.Tag = number;
             border.Cursor = Cursors.Hand;
-            border.MouseDown += CabinetCell_MouseDown;
+            border.PreviewMouseLeftButtonDown += CabinetCell_PreviewMouseDown;
+            border.PreviewMouseMove += CabinetCell_DragMove;
+            border.MouseLeftButtonUp += CabinetCell_MouseUp;
+            border.AllowDrop = true;
+            border.DragEnter += CabinetCell_DragEnter;
+            border.DragOver += CabinetCell_DragOver;
+            border.DragLeave += CabinetCell_DragLeave;
+            border.Drop += CabinetCell_Drop;
 
             border.Child = stack;
             return border;
         }
 
-        private void CabinetCell_MouseDown(object sender, MouseButtonEventArgs e)
+        // ================= 캐비닛 드래그 앤 드롭 (다른 칸으로 이동 / 맞교환) =================
+        private const string CabinetDragFormat = "SeatManagerCabinetNumber";
+        private int _cabinetPressed;          // 마우스를 누른 캐비닛 번호(0이면 없음) — 드래그 없이 떼면 클릭으로 본다
+        private Point _cabinetDragStart;
+        private (Border Cell, Brush? Bg, Brush? Border, Thickness Thickness)? _cabinetDropHighlight;
+
+        private void CabinetCell_PreviewMouseDown(object sender, MouseButtonEventArgs e)
         {
+            _cabinetPressed = 0;
             if (sender is Border border && border.Tag is int number)
+            {
+                _cabinetPressed = number;
+                _cabinetDragStart = e.GetPosition(null);
+            }
+        }
+
+        private void CabinetCell_MouseUp(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is Border border && border.Tag is int number && _cabinetPressed == number)
+            {
+                _cabinetPressed = 0;
+                HandleCabinetCellClick(number);
+            }
+        }
+
+        private void CabinetCell_DragMove(object sender, MouseEventArgs e)
+        {
+            if (_cabinetPressed == 0) return;
+            if (e.LeftButton != MouseButtonState.Pressed) { _cabinetPressed = 0; return; }
+            if (sender is not Border border || border.Tag is not int number) return;
+
+            Point pos = e.GetPosition(null);
+            if (Math.Abs(pos.X - _cabinetDragStart.X) < SystemParameters.MinimumHorizontalDragDistance &&
+                Math.Abs(pos.Y - _cabinetDragStart.Y) < SystemParameters.MinimumVerticalDragDistance)
+                return;
+
+            // 클릭이 아니라 드래그 — 마우스를 떼도 상세 창이 열리지 않게 한다
+            _cabinetPressed = 0;
+            if (!_cabinetAllocations.ContainsKey(number)) return; // 빈 칸은 끌 게 없다
+
+            if (_isCabinetFixed)
+            {
+                MessageBox.Show("캐비닛 데이터 고정 상태입니다. 고정 해제 전까지는 캐비닛을 옮길 수 없습니다.",
+                    "알림", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            double originalOpacity = border.Opacity;
+            border.Opacity = 0.3; // 지금 들고 있는 캐비닛은 흐리게
+            _cabinetEdgeSince = null;
+            _cabinetEdgeDir = 0;
+            border.QueryContinueDrag += CabinetDrag_QueryContinue; // 드래그 중 화면 가장자리에서 페이지 넘기기
+            ShowCabinetEdgeZones(true);
+            try
+            {
+                DragDrop.DoDragDrop(border, new DataObject(CabinetDragFormat, number), DragDropEffects.Move);
+            }
+            finally
+            {
+                border.QueryContinueDrag -= CabinetDrag_QueryContinue;
+                ShowCabinetEdgeZones(false);
+                _cabinetEdgeSince = null;
+                _cabinetEdgeDir = 0;
+                border.Opacity = originalOpacity;
+                RestoreCabinetDropHighlight();
+            }
+        }
+
+        // ---- 드래그 중 가장자리 자동 페이지 넘김 ----
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct NativePoint { public int X; public int Y; }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern bool GetCursorPos(out NativePoint point);
+
+        private const int CabinetEdgeDwellMs = 450;   // 가장자리에 이만큼 머물러야 넘어간다 (스치기만 하면 안 넘어감)
+        private const double CabinetEdgeMarginDip = 48; // 캐비닛 영역 안쪽 가장자리 폭 (밖으로 나가도 포함) — XAML의 CabinetEdgeZone 폭과 같아야 한다
+        private DateTime? _cabinetEdgeSince;
+        private int _cabinetEdgeDir;                  // -1: 왼쪽(이전 페이지), +1: 오른쪽(다음 페이지)
+
+        /// <summary>드래그 중에만, 지금 페이지에서 넘어갈 수 있는 쪽 가장자리를 투명한 파란색으로 보여준다.</summary>
+        private void ShowCabinetEdgeZones(bool dragging)
+        {
+            if (CabinetEdgeZoneLeft == null || CabinetEdgeZoneRight == null) return;
+            CabinetEdgeZoneLeft.Width = CabinetEdgeMarginDip;
+            CabinetEdgeZoneRight.Width = CabinetEdgeMarginDip;
+            CabinetEdgeZoneLeft.Opacity = 0.55;
+            CabinetEdgeZoneRight.Opacity = 0.55;
+            CabinetEdgeZoneLeft.Visibility = dragging && _currentCabinetPage == 2 ? Visibility.Visible : Visibility.Collapsed;
+            CabinetEdgeZoneRight.Visibility = dragging && _currentCabinetPage == 1 ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        /// <summary>
+        /// 드래그하는 동안 계속 호출된다. 커서가 캐비닛 영역의 오른쪽 가장자리(또는 그 밖)에 머물면
+        /// 1→2페이지, 2페이지에서 왼쪽 가장자리에 머물면 2→1페이지로 넘긴다.
+        /// </summary>
+        private void CabinetDrag_QueryContinue(object sender, QueryContinueDragEventArgs e)
+        {
+            FrameworkElement? block = _currentCabinetPage == 1 ? BorderCabinetBlock1 : BorderCabinetBlock2;
+            if (block == null || !block.IsVisible || !GetCursorPos(out var cur)) return;
+
+            var source = PresentationSource.FromVisual(block);
+            double scaleX = source?.CompositionTarget?.TransformToDevice.M11 ?? 1.0;
+            double scaleY = source?.CompositionTarget?.TransformToDevice.M22 ?? 1.0;
+
+            Point topLeft = block.PointToScreen(new Point(0, 0));
+            double left = topLeft.X;
+            double right = topLeft.X + block.ActualWidth * scaleX;
+            double top = topLeft.Y - 40 * scaleY;                       // 세로는 영역 위아래로 조금 여유
+            double bottom = topLeft.Y + block.ActualHeight * scaleY + 40 * scaleY;
+            double gap = 4 * scaleX; // 파란 영역은 캐비닛 UI 바깥쪽에 있다
+
+            int dir = 0;
+            if (cur.Y >= top && cur.Y <= bottom)
+            {
+                if (_currentCabinetPage == 1 && cur.X >= right + gap) dir = +1;
+                else if (_currentCabinetPage == 2 && cur.X <= left - gap) dir = -1;
+            }
+
+            // 커서가 파란 영역 안에 있으면 진하게 (넘어갈 준비가 됐다는 표시)
+            CabinetEdgeZoneLeft.Opacity = dir < 0 ? 1.0 : 0.55;
+            CabinetEdgeZoneRight.Opacity = dir > 0 ? 1.0 : 0.55;
+
+            if (dir == 0)
+            {
+                _cabinetEdgeSince = null;
+                _cabinetEdgeDir = 0;
+                return;
+            }
+
+            if (_cabinetEdgeDir != dir || _cabinetEdgeSince == null)
+            {
+                _cabinetEdgeDir = dir;
+                _cabinetEdgeSince = DateTime.Now;
+                return;
+            }
+
+            if ((DateTime.Now - _cabinetEdgeSince.Value).TotalMilliseconds >= CabinetEdgeDwellMs)
+            {
+                _currentCabinetPage = dir > 0 ? 2 : 1;
+                UpdateCabinetPage();
+                ShowCabinetEdgeZones(true); // 넘어간 페이지에서 갈 수 있는 반대쪽 영역을 보여준다
+                _cabinetEdgeSince = null; // 넘긴 뒤에는 다시 머물러야 또 넘어간다
+                _cabinetEdgeDir = 0;
+                RestoreCabinetDropHighlight();
+            }
+        }
+
+        private void CabinetCell_DragOver(object sender, DragEventArgs e)
+        {
+            bool canDrop = !_isCabinetFixed && e.Data.GetDataPresent(CabinetDragFormat) &&
+                           sender is Border b && b.Tag is int to &&
+                           (int)e.Data.GetData(CabinetDragFormat)! != to;
+            e.Effects = canDrop ? DragDropEffects.Move : DragDropEffects.None;
+            e.Handled = true;
+        }
+
+        private void CabinetCell_DragEnter(object sender, DragEventArgs e)
+        {
+            if (_isCabinetFixed || !e.Data.GetDataPresent(CabinetDragFormat)) return;
+            if (sender is Border border && border.Tag is int to && (int)e.Data.GetData(CabinetDragFormat)! != to)
+            {
+                RestoreCabinetDropHighlight();
+                _cabinetDropHighlight = (border, border.Background, border.BorderBrush, border.BorderThickness);
+                border.BorderBrush = new SolidColorBrush(Color.FromRgb(37, 99, 235));
+                border.BorderThickness = new Thickness(3);
+                border.Background = new SolidColorBrush(Color.FromRgb(219, 234, 254));
+            }
+        }
+
+        private void CabinetCell_DragLeave(object sender, DragEventArgs e)
+        {
+            if (sender is Border border && _cabinetDropHighlight?.Cell == border)
+                RestoreCabinetDropHighlight();
+        }
+
+        private void RestoreCabinetDropHighlight()
+        {
+            if (_cabinetDropHighlight is { } h)
+            {
+                h.Cell.Background = h.Bg;
+                h.Cell.BorderBrush = h.Border;
+                h.Cell.BorderThickness = h.Thickness;
+                _cabinetDropHighlight = null;
+            }
+        }
+
+        /// <summary>다른 캐비닛 칸에 놓았을 때 — 빈 칸이면 옮기고, 사용 중이면 확인 후 두 칸의 학생을 맞바꾼다.</summary>
+        private void CabinetCell_Drop(object sender, DragEventArgs e)
+        {
+            RestoreCabinetDropHighlight();
+            if (_isCabinetFixed || !e.Data.GetDataPresent(CabinetDragFormat)) return;
+            if (sender is not Border border || border.Tag is not int to) return;
+
+            int from = (int)e.Data.GetData(CabinetDragFormat)!;
+            if (from == to || !_cabinetAllocations.TryGetValue(from, out var moving)) return;
+
+            bool targetOccupied = _cabinetAllocations.TryGetValue(to, out var occupant);
+            if (targetOccupied)
+            {
+                string movingName = string.IsNullOrWhiteSpace(moving.Student.Name) ? moving.Student.StudentId : moving.Student.Name;
+                string occName = occupant.Student == null ? "다른 학생"
+                    : (string.IsNullOrWhiteSpace(occupant.Student.Name) ? occupant.Student.StudentId : occupant.Student.Name);
+
+                var confirm = MessageBox.Show(
+                    $"{to}번 캐비닛은 {occName} 학생이 쓰고 있습니다.\n\n" +
+                    $"{movingName}({from}번)과 자리를 맞바꿀까요?\n" +
+                    $"→ {movingName}: {from}번 → {to}번 / {occName}: {to}번 → {from}번",
+                    "캐비닛 맞바꾸기", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                if (confirm != MessageBoxResult.Yes) return;
+
+                _cabinetAllocations[from] = occupant;   // 대여 기간은 각자 쓰던 그대로 가져간다
+                _cabinetAllocations[to] = moving;
+            }
+            else
+            {
+                _cabinetAllocations.Remove(from);
+                _cabinetAllocations[to] = moving;
+            }
+
+            _highlightedCabinetNum = to;
+            _currentCabinetPage = to <= 24 ? 1 : 2;
+
+            RenderCabinetGrid();
+            UpdateAlertBadges();
+            SaveAppState();
+        }
+
+        /// <summary>캐비닛 칸을 클릭했을 때(드래그가 아닌 경우) — 상세 창 열기 / 미배정 칸 배정.</summary>
+        private void HandleCabinetCellClick(int number)
+        {
             {
                 // 다른 칸을 건드리는 순간 직전 이동 강조는 걷어낸다
                 if (_highlightedCabinetNum != 0)
@@ -2971,6 +3213,7 @@ namespace SeatManagerApp
                 BtnMoveCabinet.Visibility = Visibility.Collapsed;
                 BtnSelectCabinetStudent.Visibility = Visibility.Visible;
                 BtnEditCabinetInfo.Content = "취소";
+                SyncCabinetPeriodEditor(true);
             }
             else
             {
@@ -2979,6 +3222,7 @@ namespace SeatManagerApp
                 TxtCabinetModalPeriod.Background = Brushes.Transparent; TxtCabinetModalPeriod.BorderThickness = new Thickness(0);
                 BtnSaveCabinetModal.Visibility = Visibility.Collapsed;
                 BtnSelectCabinetStudent.Visibility = Visibility.Collapsed;
+                SyncCabinetPeriodEditor(false);
                 if (_cabinetAllocations.ContainsKey(_currentEditingCabinetNum) && !_isCabinetFixed)
                 {
                     BtnMoveCabinet.Visibility = Visibility.Visible;
@@ -3000,30 +3244,54 @@ namespace SeatManagerApp
             }
         }
 
+        /// <summary>대여 기간 칸을 보기(글자)/수정(캘린더) 상태에 맞게 바꾼다.</summary>
+        private void SyncCabinetPeriodEditor(bool editing)
+        {
+            if (PanelCabinetPeriodPicker == null) return;
+            PanelCabinetPeriodPicker.Visibility = editing ? Visibility.Visible : Visibility.Collapsed;
+            TxtCabinetModalPeriod.Visibility = editing ? Visibility.Collapsed : Visibility.Visible;
+            if (editing) LoadCabinetPeriodPickersFromText();
+        }
+
+        /// <summary>대여 기간 글자("YY.MM.DD ~ YY.MM.DD")를 읽어 캘린더에 채운다. 읽을 수 없으면 기본 기간을 쓴다.</summary>
+        private void LoadCabinetPeriodPickersFromText()
+        {
+            if (DpCabinetStart == null || DpCabinetEnd == null) return;
+
+            var range = ParsePeriodDates(TxtCabinetModalPeriod.Text) ?? ParsePeriodDates(DefaultCabinetPeriod);
+            DateTime start = range?.Start.Date ?? _currentSimulatedDate.Date;
+            DateTime end = range?.End.Date ?? start.AddMonths(1);
+            DpCabinetStart.SelectedDate = start;
+            DpCabinetEnd.SelectedDate = end;
+        }
+
         private void BtnSaveCabinetModal_Click(object sender, RoutedEventArgs e)
         {
             if (_currentEditingCabinetNum == 0) return;
 
             string name = TxtCabinetModalName.Text.Trim();
             string id = TxtCabinetModalId.Text.Trim();
-            string period = TxtCabinetModalPeriod.Text.Trim();
 
-            if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(id) || string.IsNullOrEmpty(period))
+            if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(id))
             {
                 MessageBox.Show("모든 항목을 입력해 주세요.", "경고", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
-            // 손으로 적은 기간도 YY.MM.DD ~ YY.MM.DD 로 맞춘다
-            var typed = ParsePeriodDates(period);
-            if (typed == null)
+            // 대여 기간은 캘린더로 고른 시작일·종료일을 YY.MM.DD ~ YY.MM.DD 로 저장한다
+            DateTime? periodStart = DpCabinetStart.SelectedDate;
+            DateTime? periodEnd = DpCabinetEnd.SelectedDate;
+            if (periodStart == null || periodEnd == null)
             {
-                MessageBox.Show(
-                    $"대여 기간을 읽지 못했습니다: {period}\n\n{FormatPeriod(_currentSimulatedDate, _currentSimulatedDate.AddMonths(1))} 형식(YY.MM.DD ~ YY.MM.DD)으로 입력해 주세요.",
-                    "대여 기간 형식 오류", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("대여 시작일과 종료일을 캘린더에서 모두 선택해 주세요.", "대여 기간", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
-            period = FormatPeriod(typed.Value.Start, typed.Value.End);
+            if (periodEnd.Value.Date < periodStart.Value.Date)
+            {
+                MessageBox.Show("대여 종료일이 시작일보다 빠릅니다. 날짜를 다시 선택해 주세요.", "대여 기간", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            string period = FormatPeriod(periodStart.Value, periodEnd.Value);
 
             // 이미 이 칸에 있던 학생이거나 마스터에 있는 학번이면 그 기록을 이어 쓴다
             // (여기서 새로 만들면 [학생선택]으로 옮겨온 학생의 소속·지도교수가 지워진다)
@@ -3208,8 +3476,8 @@ namespace SeatManagerApp
         {
             var dialog = new Microsoft.Win32.OpenFileDialog
             {
-                Filter = "Excel Files (*.xlsx)|*.xlsx|All Files (*.*)|*.*",
-                Title = "좌석 데이터 불러오기 (상상Labs 입실신청 응답 엑셀)"
+                Filter = "응답 시트 파일 (*.csv;*.xlsx)|*.csv;*.xlsx|CSV 파일 (*.csv)|*.csv|Excel 파일 (*.xlsx)|*.xlsx|모든 파일 (*.*)|*.*",
+                Title = "좌석 데이터 불러오기 (상상Labs 입실신청 응답 — 스프레드시트에서 받은 CSV/엑셀)"
             };
             if (dialog.ShowDialog() != true) return;
 
@@ -3220,7 +3488,7 @@ namespace SeatManagerApp
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"엑셀 파일을 읽는 도중 오류가 발생했습니다: {ex.Message}",
+                MessageBox.Show($"파일을 읽는 도중 오류가 발생했습니다: {ex.Message}",
                     "오류", MessageBoxButton.OK, MessageBoxImage.Error);
                 return;
             }
@@ -3228,7 +3496,7 @@ namespace SeatManagerApp
             if (imported.Count == 0)
             {
                 MessageBox.Show(
-                    "불러올 학생 정보를 찾지 못했습니다.\n상상Labs 입실신청(응답) 엑셀 양식(타임스탬프·소속·이름·학번·연락처·이메일·지도교수 열)인지 확인해주세요.",
+                    "불러올 학생 정보를 찾지 못했습니다.\n상상Labs 입실신청(응답) 시트 양식(타임스탬프·신청공간·소속·이름·학번·연락처·이메일·지도교수 열)의 CSV/엑셀 파일인지 확인해주세요.",
                     "알림", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
@@ -3327,13 +3595,12 @@ namespace SeatManagerApp
         /// </summary>
         private static List<StudentInfo> ParseSangsangLabResponses(string path)
         {
-            var rows = MiniExcelLibs.MiniExcel.Query(path).ToList();
+            var table = ReadTable(path);
             var result = new List<StudentInfo>();
             var seenIds = new HashSet<string>();
 
-            foreach (IDictionary<string, object> row in rows)
+            foreach (var v in table)
             {
-                var v = row.Values.ToList();
                 string Cell(int i) => i < v.Count ? (v[i]?.ToString()?.Trim() ?? string.Empty) : string.Empty;
 
                 string space = Cell(1);   // B
@@ -3372,6 +3639,98 @@ namespace SeatManagerApp
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// 응답 시트 파일을 행 목록으로 읽는다. .csv(스프레드시트에서 [다운로드 → CSV])와 .xlsx를 모두 지원한다.
+        /// 각 행은 A, B, C… 열 순서의 값 목록이다.
+        /// </summary>
+        private static List<List<object?>> ReadTable(string path)
+        {
+            if (string.Equals(System.IO.Path.GetExtension(path), ".csv", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(System.IO.Path.GetExtension(path), ".tsv", StringComparison.OrdinalIgnoreCase))
+            {
+                return ParseCsv(ReadTextAutoEncoding(path))
+                    .Select(r => r.Select(c => (object?)c).ToList())
+                    .ToList();
+            }
+
+            var table = new List<List<object?>>();
+            foreach (IDictionary<string, object> row in MiniExcelLibs.MiniExcel.Query(path))
+                table.Add(row.Values.Select(x => (object?)x).ToList());
+            return table;
+        }
+
+        /// <summary>UTF-8(BOM 유무 무관)로 먼저 읽고, 깨지면 엑셀에서 저장한 CSV에 흔한 CP949(EUC-KR)로 다시 읽는다.</summary>
+        private static string ReadTextAutoEncoding(string path)
+        {
+            byte[] bytes = System.IO.File.ReadAllBytes(path);
+
+            if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
+                return new System.Text.UTF8Encoding(false).GetString(bytes, 3, bytes.Length - 3);
+
+            try
+            {
+                return new System.Text.UTF8Encoding(false, throwOnInvalidBytes: true).GetString(bytes);
+            }
+            catch (System.Text.DecoderFallbackException)
+            {
+                System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+                return System.Text.Encoding.GetEncoding(949).GetString(bytes);
+            }
+        }
+
+        /// <summary>
+        /// 따옴표("...")로 감싼 칸(안에 쉼표·줄바꿈·"" 포함 가능)을 지원하는 CSV 파서.
+        /// 구분자는 첫 줄을 보고 쉼표/탭 중 더 많이 쓰인 쪽으로 정한다.
+        /// </summary>
+        private static List<List<string>> ParseCsv(string text)
+        {
+            var rows = new List<List<string>>();
+            if (string.IsNullOrEmpty(text)) return rows;
+
+            int firstLineEnd = text.IndexOf('\n');
+            string firstLine = firstLineEnd < 0 ? text : text.Substring(0, firstLineEnd);
+            char delim = firstLine.Count(c => c == '\t') > firstLine.Count(c => c == ',') ? '\t' : ',';
+
+            var row = new List<string>();
+            var cell = new System.Text.StringBuilder();
+            bool inQuotes = false;
+
+            for (int i = 0; i < text.Length; i++)
+            {
+                char c = text[i];
+
+                if (inQuotes)
+                {
+                    if (c == '"')
+                    {
+                        if (i + 1 < text.Length && text[i + 1] == '"') { cell.Append('"'); i++; }
+                        else inQuotes = false;
+                    }
+                    else cell.Append(c);
+                    continue;
+                }
+
+                if (c == '"') inQuotes = true;
+                else if (c == delim) { row.Add(cell.ToString()); cell.Clear(); }
+                else if (c == '\r') { /* \r\n의 \r은 무시 */ }
+                else if (c == '\n')
+                {
+                    row.Add(cell.ToString()); cell.Clear();
+                    rows.Add(row); row = new List<string>();
+                }
+                else cell.Append(c);
+            }
+
+            if (cell.Length > 0 || row.Count > 0)
+            {
+                row.Add(cell.ToString());
+                rows.Add(row);
+            }
+
+            // 완전히 빈 줄은 버린다
+            return rows.Where(r => r.Any(c => !string.IsNullOrWhiteSpace(c))).ToList();
         }
 
         /// <summary>학번 셀을 문자열로 정규화한다. 숫자형(2.02e7 등)으로 들어와도 정수 학번으로 되돌린다.</summary>
@@ -4127,6 +4486,7 @@ namespace SeatManagerApp
             TxtCabinetModalName.Text = selected.Name;
             TxtCabinetModalId.Text = selected.StudentId;
             TxtCabinetModalPeriod.Text = period;
+            if (_isCabinetModalEditing) LoadCabinetPeriodPickersFromText();
 
             _highlightedCabinetNum = target;
             _currentCabinetPage = target <= 24 ? 1 : 2;
@@ -4302,6 +4662,7 @@ namespace SeatManagerApp
                 !_cabinetAllocations.ContainsKey(_currentEditingCabinetNum))
             {
                 TxtCabinetModalPeriod.Text = _activeCabinetPeriod;
+                LoadCabinetPeriodPickersFromText();
             }
         }
 
