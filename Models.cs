@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
@@ -18,6 +18,7 @@ namespace SeatManagerApp
         public string Advisor { get; set; } = string.Empty;     // 지도교수
         public string StudentId { get; set; } = string.Empty;   // 학번
         public string Email { get; set; } = string.Empty;       // 이메일
+        public string Contact { get; set; } = string.Empty;     // 연락처
         public string CabinetPeriod { get; set; } = string.Empty; // 대여 기간
 
         /// <summary>
@@ -38,6 +39,7 @@ namespace SeatManagerApp
                 Advisor = this.Advisor,
                 StudentId = this.StudentId,
                 Email = this.Email,
+                Contact = this.Contact,
                 CabinetPeriod = this.CabinetPeriod,
                 LastActiveSeason = this.LastActiveSeason,
                 Attendance = new List<AttendanceRecord>()

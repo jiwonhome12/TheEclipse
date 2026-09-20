@@ -68,7 +68,6 @@ namespace SeatManagerApp
         // App Modes
         private bool _isSeatFixMode = false;
         private bool _isSeatDeleteMode = false;
-        private bool _isCabinetFixed = false;
 
         /// <summary>드래그를 시작할 수 있는 좌석(마우스를 누른 시점, 학생이 앉아 있는 좌석).</summary>
         private Seat? _seatDragCandidate;
@@ -1825,20 +1824,13 @@ namespace SeatManagerApp
 
         /// <summary>
         /// 데이터 관리 탭의 학생 목록을 다시 그린다.
-        /// 기본은 이번 시즌에 활동한 학생만 보여주고, [지난 시즌까지 보기]를 켜면 전부 보여준다.
-        /// 검색어가 있으면 그 결과 안에서 다시 걸러낸다. (학생 정보 자체는 시즌이 바뀌어도 지워지지 않는다)
+        /// 등록된 학생을 모두 보여주고, 검색어가 있으면 그 결과 안에서 걸러낸다. (학생 정보는 시즌이 바뀌어도 지워지지 않는다)
         /// </summary>
         private void RefreshMasterGrid()
         {
             if (GridMasterStudents == null) return;
 
             IEnumerable<StudentInfo> view = _masterStudents;
-
-            if (ChkShowAllSeasonStudents?.IsChecked != true)
-            {
-                string season = CurrentSeasonKey();
-                view = view.Where(s => s.LastActiveSeason == season);
-            }
 
             string query = (TxtSearchStudent?.Text ?? string.Empty).Trim().ToLower();
             if (query.Length > 0)
@@ -1865,11 +1857,6 @@ namespace SeatManagerApp
                 if (string.IsNullOrWhiteSpace(st.LastActiveSeason))
                     st.LastActiveSeason = seasonKey;
             }
-        }
-
-        private void ChkShowAllSeasonStudents_Changed(object sender, RoutedEventArgs e)
-        {
-            RefreshMasterGrid();
         }
 
         /// <summary>학생을 이번 시즌 활동자로 표시한다(마스터 기준). 학번으로 마스터를 찾아 갱신한다.</summary>
@@ -2088,6 +2075,7 @@ namespace SeatManagerApp
                 TxtMasterName.Text = student.Name;
                 TxtMasterDept.Text = student.Department;
                 TxtMasterAdvisor.Text = student.Advisor;
+                TxtMasterContact.Text = student.Contact;
                 TxtMasterEmail.Text = student.Email;
                 PanelMasterEdit.IsEnabled = true;
             }
@@ -2120,6 +2108,7 @@ namespace SeatManagerApp
                 _selectedMasterStudent.Name = TxtMasterName.Text;
                 _selectedMasterStudent.Department = TxtMasterDept.Text;
                 _selectedMasterStudent.Advisor = TxtMasterAdvisor.Text;
+                _selectedMasterStudent.Contact = TxtMasterContact.Text;
                 _selectedMasterStudent.Email = TxtMasterEmail.Text;
 
                 // Sync with all seat layouts in cache recursively
@@ -2133,6 +2122,7 @@ namespace SeatManagerApp
                             s.Student.Name = _selectedMasterStudent.Name;
                             s.Student.Department = _selectedMasterStudent.Department;
                             s.Student.Advisor = _selectedMasterStudent.Advisor;
+                            s.Student.Contact = _selectedMasterStudent.Contact;
                             s.Student.Email = _selectedMasterStudent.Email;
 
                             if (s.Student.Department.Contains("대학원"))
@@ -2152,7 +2142,8 @@ namespace SeatManagerApp
                         s.Student.Name = _selectedMasterStudent.Name;
                         s.Student.Department = _selectedMasterStudent.Department;
                         s.Student.Advisor = _selectedMasterStudent.Advisor;
-                        s.Student.Email = _selectedMasterStudent.Email;
+                        s.Student.Contact = _selectedMasterStudent.Contact;
+                            s.Student.Email = _selectedMasterStudent.Email;
 
                         if (s.Student.Department.Contains("대학원"))
                         {
@@ -2651,23 +2642,6 @@ namespace SeatManagerApp
             MessageBox.Show("캐비닛 데이터 삭제 기능 구현용 이벤트 핸들러입니다.", "캐비닛 삭제", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
-        private void BtnCabinetFix_Click(object sender, RoutedEventArgs e)
-        {
-            _isCabinetFixed = !_isCabinetFixed;
-            if (_isCabinetFixed)
-            {
-                BtnCabinetFix.Content = "🔓 캐비닛 고정 해제";
-                BtnCabinetFix.Background = new SolidColorBrush(Color.FromRgb(254, 240, 138)); // Yellow indicator
-                MessageBox.Show("캐비닛 배정 현황이 고정되었습니다. 고정 해제 전까지는 배정 변경, 이동 및 신규 배정이 불가능합니다.", "캐비닛 고정 완료", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-            else
-            {
-                BtnCabinetFix.Content = "캐비닛 데이터 고정";
-                BtnCabinetFix.Background = Brushes.White;
-                MessageBox.Show("캐비닛 배정 현황 고정이 해제되었습니다.", "캐비닛 고정 해제", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-        }
-
         private void BtnCabinetExport_Click(object sender, RoutedEventArgs e)
         {
             if (_cabinetAllocations.Count == 0)
@@ -2942,12 +2916,6 @@ namespace SeatManagerApp
             _cabinetPressed = 0;
             if (!_cabinetAllocations.ContainsKey(number)) return; // 빈 칸은 끌 게 없다
 
-            if (_isCabinetFixed)
-            {
-                MessageBox.Show("캐비닛 데이터 고정 상태입니다. 고정 해제 전까지는 캐비닛을 옮길 수 없습니다.",
-                    "알림", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
 
             double originalOpacity = border.Opacity;
             border.Opacity = 0.3; // 지금 들고 있는 캐비닛은 흐리게
@@ -3052,7 +3020,7 @@ namespace SeatManagerApp
 
         private void CabinetCell_DragOver(object sender, DragEventArgs e)
         {
-            bool canDrop = !_isCabinetFixed && e.Data.GetDataPresent(CabinetDragFormat) &&
+            bool canDrop = e.Data.GetDataPresent(CabinetDragFormat) &&
                            sender is Border b && b.Tag is int to &&
                            (int)e.Data.GetData(CabinetDragFormat)! != to;
             e.Effects = canDrop ? DragDropEffects.Move : DragDropEffects.None;
@@ -3061,7 +3029,7 @@ namespace SeatManagerApp
 
         private void CabinetCell_DragEnter(object sender, DragEventArgs e)
         {
-            if (_isCabinetFixed || !e.Data.GetDataPresent(CabinetDragFormat)) return;
+            if (!e.Data.GetDataPresent(CabinetDragFormat)) return;
             if (sender is Border border && border.Tag is int to && (int)e.Data.GetData(CabinetDragFormat)! != to)
             {
                 RestoreCabinetDropHighlight();
@@ -3093,7 +3061,7 @@ namespace SeatManagerApp
         private void CabinetCell_Drop(object sender, DragEventArgs e)
         {
             RestoreCabinetDropHighlight();
-            if (_isCabinetFixed || !e.Data.GetDataPresent(CabinetDragFormat)) return;
+            if (!e.Data.GetDataPresent(CabinetDragFormat)) return;
             if (sender is not Border border || border.Tag is not int to) return;
 
             int from = (int)e.Data.GetData(CabinetDragFormat)!;
@@ -3151,26 +3119,12 @@ namespace SeatManagerApp
                     TxtCabinetModalPeriod.Text = alloc.Period;
                     
                     SetCabinetModalEditMode(false);
-                    if (_isCabinetFixed)
-                    {
-                        BtnEditCabinetInfo.Visibility = Visibility.Collapsed;
-                        BtnMoveCabinet.Visibility = Visibility.Collapsed;
-                    }
-                    else
-                    {
-                        BtnEditCabinetInfo.Visibility = Visibility.Visible;
-                        BtnMoveCabinet.Visibility = Visibility.Visible;
-                    }
+                    BtnEditCabinetInfo.Visibility = Visibility.Visible;
+                    BtnMoveCabinet.Visibility = Visibility.Visible;
                     ModalCabinetDetails.Visibility = Visibility.Visible;
                 }
                 else
                 {
-                    if (_isCabinetFixed)
-                    {
-                        MessageBox.Show("캐비닛 데이터 고정 상태입니다. 고정 해제 전까지는 신규 배정이 불가능합니다.", "알림", MessageBoxButton.OK, MessageBoxImage.Warning);
-                        return;
-                    }
-                    
                     var result = MessageBox.Show($"[캐비닛 {number}번] 사용 가능 (미배정) 상태입니다.\n이 캐비닛에 새로운 학생을 임의 배정하시겠습니까?", "캐비닛 배정", MessageBoxButton.YesNo, MessageBoxImage.Question);
                     if (result == MessageBoxResult.Yes)
                     {
@@ -3223,7 +3177,7 @@ namespace SeatManagerApp
                 BtnSaveCabinetModal.Visibility = Visibility.Collapsed;
                 BtnSelectCabinetStudent.Visibility = Visibility.Collapsed;
                 SyncCabinetPeriodEditor(false);
-                if (_cabinetAllocations.ContainsKey(_currentEditingCabinetNum) && !_isCabinetFixed)
+                if (_cabinetAllocations.ContainsKey(_currentEditingCabinetNum))
                 {
                     BtnMoveCabinet.Visibility = Visibility.Visible;
                 }
@@ -3232,11 +3186,6 @@ namespace SeatManagerApp
                     BtnMoveCabinet.Visibility = Visibility.Collapsed;
                 }
                 
-                if (_isCabinetFixed)
-                {
-                    BtnEditCabinetInfo.Visibility = Visibility.Collapsed;
-                }
-                else
                 {
                     BtnEditCabinetInfo.Visibility = Visibility.Visible;
                     BtnEditCabinetInfo.Content = "정보 수정";
@@ -3569,6 +3518,7 @@ namespace SeatManagerApp
                 if (string.IsNullOrWhiteSpace(master.Department) && !string.IsNullOrWhiteSpace(st.Department)) { master.Department = st.Department; changed = true; }
                 if (string.IsNullOrWhiteSpace(master.Advisor) && !string.IsNullOrWhiteSpace(st.Advisor)) { master.Advisor = st.Advisor; changed = true; }
                 if (string.IsNullOrWhiteSpace(master.Email) && !string.IsNullOrWhiteSpace(st.Email)) { master.Email = st.Email; changed = true; }
+                if (string.IsNullOrWhiteSpace(master.Contact) && !string.IsNullOrWhiteSpace(st.Contact)) { master.Contact = st.Contact; changed = true; }
                 if (changed) updatedInMaster++;
             }
 
@@ -3607,6 +3557,7 @@ namespace SeatManagerApp
                 string dept = Cell(2);    // C
                 string name = Cell(3);    // D
                 string idRaw = Cell(4);   // E
+                string contact = NormalizePhone(v.Count > 5 ? v[5] : null); // F
                 string email = Cell(6);   // G
                 string advisor = Cell(7); // H
 
@@ -3634,6 +3585,7 @@ namespace SeatManagerApp
                     Name = name,
                     Department = string.IsNullOrWhiteSpace(dept) ? "소프트웨어전공" : dept,
                     Email = email,
+                    Contact = contact,
                     Advisor = advisor
                 });
             }
@@ -3734,6 +3686,22 @@ namespace SeatManagerApp
         }
 
         /// <summary>학번 셀을 문자열로 정규화한다. 숫자형(2.02e7 등)으로 들어와도 정수 학번으로 되돌린다.</summary>
+        /// <summary>
+        /// 연락처 칸을 문자열로 정리한다. 엑셀이 숫자로 저장해 앞자리 0이 빠진 번호(1084583371)는 0을 붙여 복원한다.
+        /// 하이픈이 있는 값(010-1234-5678)은 입력한 그대로 둔다.
+        /// </summary>
+        private static string NormalizePhone(object? v)
+        {
+            string s = v switch
+            {
+                null => string.Empty,
+                double d => d.ToString("0", System.Globalization.CultureInfo.InvariantCulture),
+                _ => v.ToString()?.Trim() ?? string.Empty
+            };
+            if (s.Length >= 9 && s.Length <= 10 && s.All(char.IsDigit) && s.StartsWith("1")) s = "0" + s;
+            return s;
+        }
+
         private static string NormalizeStudentId(object? v)
         {
             if (v == null) return string.Empty;
@@ -4089,53 +4057,98 @@ namespace SeatManagerApp
         {
             var dialog = new Microsoft.Win32.OpenFileDialog
             {
-                Filter = "Excel Files (*.xlsx)|*.xlsx|All Files (*.*)|*.*",
-                Title = "마스터 학생 데이터베이스 엑셀 가져오기"
+                Filter = "학생 명단 (*.xlsx;*.csv)|*.xlsx;*.csv|All Files (*.*)|*.*",
+                Title = "마스터 학생 데이터베이스 가져오기"
             };
-            if (dialog.ShowDialog() == true)
+            if (dialog.ShowDialog() != true) return;
+
+            try
             {
-                try
+                var table = ReadTable(dialog.FileName);
+
+                // 제목 행을 찾아 열 위치를 정한다. 못 찾으면 학번/이름/소속/지도교수/연락처/이메일 순서로 본다.
+                int headerRow = -1;
+                for (int i = 0; i < Math.Min(table.Count, 5); i++)
                 {
-                    var rows = MiniExcelLibs.MiniExcel.Query(dialog.FileName).ToList();
-                    int importedCount = 0;
-                    foreach (IDictionary<string, object> row in rows)
+                    if (table[i].Any(x => (x?.ToString() ?? "").Contains("학번") || (x?.ToString() ?? "").Contains("StudentId")))
                     {
-                        var values = row.Values.ToList();
-                        if (values.Count < 2) continue;
+                        headerRow = i;
+                        break;
+                    }
+                }
 
-                        string col0 = values[0]?.ToString() ?? "";
-                        if (col0 == "StudentId" || col0 == "학번" || string.IsNullOrWhiteSpace(col0)) continue;
-
-                        string id = col0;
-                        string name = values.Count > 1 ? (values[1]?.ToString() ?? "") : "";
-                        string dept = values.Count > 2 ? (values[2]?.ToString() ?? "") : "소프트웨어융합학과";
-                        string advisor = values.Count > 3 ? (values[3]?.ToString() ?? "") : "김동욱 교수";
-                        string email = values.Count > 4 ? (values[4]?.ToString() ?? "") : "";
-
-                        if (!_masterStudents.Any(m => m.StudentId == id))
+                int colId = 0, colName = 1, colDept = 2, colAdvisor = 3, colContact = 4, colEmail = 5;
+                if (headerRow >= 0)
+                {
+                    int Find(params string[] keys)
+                    {
+                        var h = table[headerRow];
+                        for (int i = 0; i < h.Count; i++)
                         {
-                            var student = new StudentInfo
-                            {
-                                StudentId = id,
-                                Name = name,
-                                Department = dept,
-                                Advisor = advisor,
-                                Email = email,
-                                LastActiveSeason = CurrentSeasonKey()
-                            };
-                            _masterStudents.Add(student);
-                            importedCount++;
+                            string t = h[i]?.ToString() ?? "";
+                            if (keys.Any(k => t.Contains(k, StringComparison.OrdinalIgnoreCase))) return i;
                         }
+                        return -1;
+                    }
+                    colId = Find("학번", "StudentId");
+                    colName = Find("이름", "Name");
+                    colDept = Find("소속", "학과", "Department");
+                    colAdvisor = Find("지도", "Advisor");
+                    colContact = Find("연락처", "전화", "휴대", "Contact", "Phone");
+                    colEmail = Find("이메일", "메일", "Email");
+                }
+
+                int importedCount = 0, updatedCount = 0;
+                for (int r = headerRow + 1; r < table.Count; r++)
+                {
+                    var row = table[r];
+                    string Cell(int i) => i >= 0 && i < row.Count ? (row[i]?.ToString()?.Trim() ?? string.Empty) : string.Empty;
+
+                    string id = NormalizeStudentId(colId >= 0 && colId < row.Count ? row[colId] : null);
+                    // 학번 칸에 숫자가 없으면 제목/안내 행으로 보고 넘어간다 (제목 행이 데이터로 들어가는 것을 막는다)
+                    if (string.IsNullOrWhiteSpace(id) || !id.Any(char.IsDigit)) continue;
+
+                    string name = Cell(colName);
+                    string dept = Cell(colDept);
+                    string advisor = Cell(colAdvisor).Replace("교수님", "").Replace("교수", "").Trim();
+                    string contact = NormalizePhone(colContact >= 0 && colContact < row.Count ? row[colContact] : null);
+                    string email = Cell(colEmail);
+
+                    var existing = _masterStudents.FirstOrDefault(m => m.StudentId == id);
+                    if (existing == null)
+                    {
+                        _masterStudents.Add(new StudentInfo
+                        {
+                            StudentId = id,
+                            Name = name,
+                            Department = string.IsNullOrWhiteSpace(dept) ? "소프트웨어전공" : dept,
+                            Advisor = advisor,
+                            Contact = contact,
+                            Email = email,
+                            LastActiveSeason = CurrentSeasonKey()
+                        });
+                        importedCount++;
+                        continue;
                     }
 
-                    RefreshMasterGrid();
-                    SaveAppState();
-                    MessageBox.Show($"엑셀 파일로부터 {importedCount}명의 마스터 학생 정보를 등록했습니다.", "가져오기 성공", MessageBoxButton.OK, MessageBoxImage.Information);
+                    // 이미 있는 학생은 비어 있던 항목만 채운다 (기존 값은 덮어쓰지 않는다)
+                    bool changed = false;
+                    if (string.IsNullOrWhiteSpace(existing.Name) && name != "") { existing.Name = name; changed = true; }
+                    if (string.IsNullOrWhiteSpace(existing.Department) && dept != "") { existing.Department = dept; changed = true; }
+                    if (string.IsNullOrWhiteSpace(existing.Advisor) && advisor != "") { existing.Advisor = advisor; changed = true; }
+                    if (string.IsNullOrWhiteSpace(existing.Contact) && contact != "") { existing.Contact = contact; changed = true; }
+                    if (string.IsNullOrWhiteSpace(existing.Email) && email != "") { existing.Email = email; changed = true; }
+                    if (changed) updatedCount++;
                 }
-                catch (Exception ex)
-                {
-                    MessageBox.Show($"엑셀 파일을 읽는 도중 오류가 발생했습니다: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
-                }
+
+                RefreshMasterGrid();
+                SaveAppState();
+                MessageBox.Show($"학생 정보 {importedCount}명을 새로 등록했습니다." + (updatedCount > 0 ? $"\n기존 학생 {updatedCount}명의 빈 항목(연락처 등)을 채웠습니다." : ""),
+                    "가져오기 성공", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"파일을 읽는 도중 오류가 발생했습니다: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 

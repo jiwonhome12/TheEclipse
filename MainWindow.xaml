@@ -905,7 +905,6 @@
                                 <TextBox x:Name="TxtSearchCabinet" Width="120" Padding="5" VerticalAlignment="Center" Margin="0,0,10,0" KeyUp="TxtSearchCabinet_KeyUp"/>
                                 <Button x:Name="BtnShowApprovalHistory" Content="📋 승인/반려 내역" Style="{StaticResource ActionBarBtn}" Margin="0,0,8,0" Tag="캐비닛" Click="BtnShowApprovalHistory_Click"/>
                                 <Button x:Name="BtnCabinetDelete" Content="캐비닛 데이터 삭제" Style="{StaticResource ActionBarBtn}" Margin="0,0,8,0" Click="BtnCabinetDelete_Click"/>
-                                <Button x:Name="BtnCabinetFix" Content="캐비닛 데이터 고정" Style="{StaticResource ActionBarBtn}" Margin="0,0,8,0" Click="BtnCabinetFix_Click"/>
                                 <Button x:Name="BtnCabinetExport" Content="캐비닛 데이터 추출" Style="{StaticResource ActionBarBtn}" Margin="0,0,8,0" Click="BtnCabinetExport_Click"/>
                                 <Button x:Name="BtnImportCabinetExcel" Content="📥 엑셀 가져오기" Style="{StaticResource ActionBarBtn}" Click="BtnImportCabinetExcel_Click"/>
                             </StackPanel>
@@ -1128,7 +1127,7 @@
 
                     <StackPanel Grid.Row="0" Margin="0,0,0,15">
                         <TextBlock Text="데이터 관리 (마스터 데이터베이스)" FontSize="18" FontWeight="Bold" Foreground="#111827"/>
-                        <TextBlock x:Name="TxtMasterSeasonInfo" Text="기본적으로 이번 시즌에 활동한 학생만 보여줍니다. 학생 정보 자체는 시즌이 바뀌어도 지워지지 않으며, [지난 시즌까지 보기]로 전체를 볼 수 있습니다."
+                        <TextBlock x:Name="TxtMasterSeasonInfo" Text="학생 정보는 시즌이 바뀌어도 지워지지 않고 계속 보관됩니다."
                                    FontSize="12" Foreground="#6B7280" Margin="0,4,0,0" TextWrapping="Wrap"/>
                     </StackPanel>
 
@@ -1144,8 +1143,6 @@
                                     <TextBlock Text="검색 초기화" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Button>
-                            <CheckBox x:Name="ChkShowAllSeasonStudents" Content="지난 시즌까지 보기" VerticalAlignment="Center" FontSize="12" Margin="0,0,12,0"
-                                      Checked="ChkShowAllSeasonStudents_Changed" Unchecked="ChkShowAllSeasonStudents_Changed"/>
                             <Button x:Name="BtnImportDataManageExcel" Content="📥 엑셀 가져오기" Style="{StaticResource ActionBarBtn}" Padding="15,6" Click="BtnImportDataManageExcel_Click" Margin="0,0,8,0"/>
                             <Button x:Name="BtnFaceAttendance" Content="🎥 얼굴인식 출결 기록" Style="{StaticResource ActionBarBtn}" Padding="15,6" Click="BtnFaceAttendance_Click"/>
                             <Button x:Name="BtnDeleteAllStudents" Content="🗑️ 전체 삭제" Style="{StaticResource ActionBarBtn}" Padding="15,6" Click="BtnDeleteAllStudents_Click" Background="#EF4444" Foreground="White" BorderBrush="#DC2626" Margin="8,0,0,0"/>
@@ -1166,8 +1163,8 @@
                                     <DataGridTextColumn Header="이름" Binding="{Binding Name}" Width="100"/>
                                     <DataGridTextColumn Header="소속" Binding="{Binding Department}" Width="150"/>
                                     <DataGridTextColumn Header="지도교수" Binding="{Binding Advisor}" Width="100"/>
+                                    <DataGridTextColumn Header="연락처" Binding="{Binding Contact}" Width="120"/>
                                     <DataGridTextColumn Header="이메일" Binding="{Binding Email}" Width="150"/>
-                                    <DataGridTextColumn Header="활동 시즌" Binding="{Binding LastActiveSeason}" Width="110" IsReadOnly="True"/>
                                 </DataGrid.Columns>
                             </DataGrid>
 
@@ -1188,6 +1185,9 @@
 
                                         <TextBlock Text="지도교수" FontSize="11" Foreground="#6B7280"/>
                                         <TextBox x:Name="TxtMasterAdvisor" Margin="0,2,0,8" Padding="5"/>
+
+                                        <TextBlock Text="연락처" FontSize="11" Foreground="#6B7280"/>
+                                        <TextBox x:Name="TxtMasterContact" Margin="0,2,0,8" Padding="5"/>
 
                                         <TextBlock Text="이메일" FontSize="11" Foreground="#6B7280"/>
                                         <TextBox x:Name="TxtMasterEmail" Margin="0,2,0,15" Padding="5"/>
