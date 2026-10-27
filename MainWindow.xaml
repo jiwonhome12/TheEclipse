@@ -1194,6 +1194,18 @@
 
                                         <Button Content="변경 사항 저장" Background="#10B981" Foreground="White" BorderThickness="0" Padding="0,8" FontWeight="Bold" Click="BtnSaveMaster_Click"/>
                                         <Button Content="마스터에서 삭제" Background="#EF4444" Foreground="White" BorderThickness="0" Padding="0,8" FontWeight="Bold" Margin="0,8,0,0" Click="BtnDeleteMaster_Click"/>
+
+                                        <!-- 이 학생의 얼굴인식 출결 기록 (attendance.json, 학번으로 연결) -->
+                                        <TextBlock Text="얼굴인식 출석" FontSize="14" FontWeight="Bold" Foreground="#374151" Margin="0,22,0,6"/>
+                                        <TextBlock x:Name="TxtMasterFaceSummary" FontSize="11" Foreground="#4B5563" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                        <DataGrid x:Name="GridMasterFaceAttendance" AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column" GridLinesVisibility="Horizontal" RowHeight="28" Height="220" BorderBrush="#E5E7EB" BorderThickness="1" Background="Transparent" FontSize="11">
+                                            <DataGrid.Columns>
+                                                <DataGridTextColumn Header="날짜" Binding="{Binding Date}" Width="80" IsReadOnly="True"/>
+                                                <DataGridTextColumn Header="출근" Binding="{Binding CheckIn}" Width="60" IsReadOnly="True"/>
+                                                <DataGridTextColumn Header="퇴근" Binding="{Binding CheckOut}" Width="60" IsReadOnly="True"/>
+                                                <DataGridTextColumn Header="근무" Binding="{Binding WorkTimeText}" Width="*" IsReadOnly="True"/>
+                                            </DataGrid.Columns>
+                                        </DataGrid>
                                     </StackPanel>
                                 </ScrollViewer>
                             </Border>
@@ -1581,12 +1593,14 @@
         </Grid>
         <!-- ================= 얼굴인식 출결 기록 모달 ================= -->
         <Grid x:Name="ModalFaceAttendance" Grid.ColumnSpan="2" Background="#80000000" Visibility="Collapsed">
-            <Border Background="White" Width="750" Height="520" CornerRadius="20" Padding="35" VerticalAlignment="Center" HorizontalAlignment="Center">
+            <Border Background="White" Width="920" Height="640" CornerRadius="20" Padding="35" VerticalAlignment="Center" HorizontalAlignment="Center">
                 <Border.Effect>
                     <DropShadowEffect BlurRadius="25" ShadowDepth="0" Color="Black" Opacity="0.25"/>
                 </Border.Effect>
                 <Grid>
                     <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
@@ -1599,19 +1613,64 @@
                     <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,4">
                         <TextBlock Text="얼굴인식 출결 기록" FontSize="18" FontWeight="Bold" Foreground="#111827"/>
                         <Button Content="🔄 새로고침" Style="{StaticResource ActionBarBtn}" Padding="12,5" Margin="15,0,0,0" Click="BtnRefreshFaceAttendance_Click"/>
+                        <!-- 보기 전환 — 출결 기록 목록 / 월간 기준(주마다 20시간 · 3회) 확인 -->
+                        <Button x:Name="BtnFaceViewRecords" Content="📋 기록 보기" Style="{StaticResource ActionBarBtn}" FontWeight="Bold" Padding="12,5" Margin="15,0,0,0" Click="BtnFaceViewRecords_Click"/>
+                        <Button x:Name="BtnFaceViewCriteria" Content="✅ 월간 기준 확인" Style="{StaticResource ActionBarBtn}" Padding="12,5" Margin="6,0,0,0" Click="BtnFaceViewCriteria_Click"/>
                     </StackPanel>
-                    <TextBlock Grid.Row="1" x:Name="TxtFaceAttendanceInfo" Text="얼굴인식 프로그램(insightface-attendance)이 기록한 출근/퇴근 시간입니다." FontSize="11" Foreground="#6B7280" Margin="0,0,0,15" TextWrapping="Wrap"/>
+                    <TextBlock Grid.Row="1" x:Name="TxtFaceAttendanceInfo" Text="얼굴인식 프로그램(insightface-attendance)이 기록한 출근/퇴근 시간입니다." FontSize="11" Foreground="#6B7280" Margin="0,0,0,12" TextWrapping="Wrap"/>
 
-                    <Border Grid.Row="2" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="8" Background="#F9FAFB">
+                    <!-- 필터 — 검색어(학번/이름) · 기간 · 빠른 기간 버튼. 바꾸면 바로 다시 걸러서 보여준다 -->
+                    <Border Grid.Row="2" x:Name="PanelFaceRecordFilter" Background="#F9FAFB" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="8" Padding="12,8" Margin="0,0,0,10">
+                        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="학번/이름" FontSize="12" FontWeight="SemiBold" Foreground="#374151" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBox x:Name="TxtFaceAttendanceSearch" Width="130" Padding="5" VerticalContentAlignment="Center" Margin="0,0,14,0" TextChanged="FaceAttendanceFilter_Changed"/>
+                            <TextBlock Text="기간" FontSize="12" FontWeight="SemiBold" Foreground="#374151" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <DatePicker x:Name="DpFaceAttendanceFrom" Width="120" VerticalContentAlignment="Center" SelectedDateChanged="FaceAttendanceFilter_Changed"/>
+                            <TextBlock Text="~" Foreground="#6B7280" VerticalAlignment="Center" Margin="6,0"/>
+                            <DatePicker x:Name="DpFaceAttendanceTo" Width="120" VerticalContentAlignment="Center" SelectedDateChanged="FaceAttendanceFilter_Changed" Margin="0,0,10,0"/>
+                            <Button Content="오늘" Style="{StaticResource ActionBarBtn}" Padding="10,4" Margin="0,0,4,0" Tag="today" Click="BtnFaceAttendanceQuickRange_Click"/>
+                            <Button Content="이번 주" Style="{StaticResource ActionBarBtn}" Padding="10,4" Margin="0,0,4,0" Tag="week" Click="BtnFaceAttendanceQuickRange_Click"/>
+                            <Button Content="이번 달" Style="{StaticResource ActionBarBtn}" Padding="10,4" Margin="0,0,4,0" Tag="month" Click="BtnFaceAttendanceQuickRange_Click"/>
+                            <Button Content="전체" Style="{StaticResource ActionBarBtn}" Padding="10,4" Tag="all" Click="BtnFaceAttendanceQuickRange_Click"/>
+                        </WrapPanel>
+                    </Border>
+
+                    <!-- 월간 기준 확인 필터 — 월 · 결과 · 학번/이름 -->
+                    <Border Grid.Row="2" x:Name="PanelFaceCriteriaFilter" Visibility="Collapsed" Background="#F0FDF4" BorderBrush="#BBF7D0" BorderThickness="1" CornerRadius="8" Padding="12,8" Margin="0,0,0,10">
+                        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="월" FontSize="12" FontWeight="SemiBold" Foreground="#374151" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <ComboBox x:Name="CmbFaceCriteriaMonth" Width="110" VerticalContentAlignment="Center" Margin="0,0,14,0" SelectionChanged="FaceCriteriaFilter_Changed"/>
+                            <TextBlock Text="결과" FontSize="12" FontWeight="SemiBold" Foreground="#374151" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <ComboBox x:Name="CmbFaceCriteriaResult" Width="110" VerticalContentAlignment="Center" Margin="0,0,14,0" SelectedIndex="0" SelectionChanged="FaceCriteriaFilter_Changed">
+                                <ComboBoxItem Content="전체"/>
+                                <ComboBoxItem Content="✅ 충족"/>
+                                <ComboBoxItem Content="❌ 미충족"/>
+                                <ComboBoxItem Content="⏳ 진행 중"/>
+                            </ComboBox>
+                            <TextBlock Text="학번/이름" FontSize="12" FontWeight="SemiBold" Foreground="#374151" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBox x:Name="TxtFaceCriteriaSearch" Width="130" Padding="5" VerticalContentAlignment="Center" TextChanged="FaceCriteriaFilter_Changed"/>
+                            <TextBlock x:Name="TxtFaceCriteriaRule" FontSize="11" Foreground="#166534" VerticalAlignment="Center" Margin="14,0,0,0"/>
+                        </WrapPanel>
+                    </Border>
+
+                    <!-- 합계 — 걸러진 기록 기준 -->
+                    <TextBlock Grid.Row="3" x:Name="TxtFaceAttendanceSummary" FontSize="13" FontWeight="SemiBold" Foreground="#111827" Margin="2,0,0,10" TextWrapping="Wrap"/>
+
+                    <Border Grid.Row="4" x:Name="PanelFaceRecordGrid" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="8" Background="#F9FAFB">
                         <DataGrid x:Name="GridFaceAttendance" AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column" GridLinesVisibility="Horizontal" RowHeight="35" BorderThickness="0" Background="Transparent">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="학번" Binding="{Binding StudentId}" Width="110" IsReadOnly="True"/>
                                 <DataGridTextColumn Header="이름" Binding="{Binding Name}" Width="90" IsReadOnly="True"/>
                                 <DataGridTextColumn Header="날짜" Binding="{Binding Date}" Width="110" IsReadOnly="True"/>
                                 <DataGridTextColumn Header="출근" Binding="{Binding CheckIn}" Width="100" IsReadOnly="True"/>
-                                <DataGridTextColumn Header="퇴근" Binding="{Binding CheckOut}" Width="*" MinWidth="100" IsReadOnly="True"/>
+                                <DataGridTextColumn Header="퇴근" Binding="{Binding CheckOut}" Width="100" IsReadOnly="True"/>
+                                <DataGridTextColumn Header="근무시간" Binding="{Binding WorkTimeText}" Width="*" MinWidth="100" IsReadOnly="True"/>
                             </DataGrid.Columns>
                         </DataGrid>
+                    </Border>
+                    <!-- 월간 기준 확인 — 주차 열은 고른 달에 맞춰 코드에서 만든다 -->
+                    <Border Grid.Row="4" x:Name="PanelFaceCriteriaGrid" Visibility="Collapsed" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="8" Background="#F9FAFB">
+                        <DataGrid x:Name="GridFaceCriteria" AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True" HeadersVisibility="Column" GridLinesVisibility="Horizontal" RowHeight="35" BorderThickness="0" Background="Transparent"/>
                     </Border>
                 </Grid>
             </Border>

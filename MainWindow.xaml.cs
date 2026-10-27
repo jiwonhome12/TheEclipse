@@ -2078,10 +2078,12 @@ namespace SeatManagerApp
                 TxtMasterContact.Text = student.Contact;
                 TxtMasterEmail.Text = student.Email;
                 PanelMasterEdit.IsEnabled = true;
+                ShowMasterFaceAttendance(student);
             }
             else
             {
                 PanelMasterEdit.IsEnabled = false;
+                ShowMasterFaceAttendance(null);
             }
         }
 
@@ -3876,90 +3878,161 @@ namespace SeatManagerApp
             _equipmentIssues.Remove(issue);
         }
 
+        /// <summary>
+        /// 기자재 대여 현황 엑셀/CSV를 읽어온다. 두 가지 양식을 모두 지원한다.
+        /// 1) 이 프로그램의 [엑셀로 추출] 양식(번호·수량·추가 대여물품(수량)·사용장소·사용목적·특이사항·전공·학년·학번·연락처·지도교수·성명·대여일·반납예정일·반납일)
+        /// 2) 이름·학과·학년·학번·연락처·지도교수·대여품목·품목번호·대여날짜·반납예정날짜 형태의 현황표(제목 행이 있어도 된다)
+        /// 제목 행 위치와 열 순서는 헤더 문구를 보고 알아서 찾는다.
+        /// </summary>
         private void ImportEquipmentExcel(string targetEquipType)
         {
             var dialog = new Microsoft.Win32.OpenFileDialog
             {
-                Filter = "Excel Files (*.xlsx)|*.xlsx|All Files (*.*)|*.*",
-                Title = $"{targetEquipType} 대여 현황 엑셀 가져오기"
+                Filter = "대여 현황 파일 (*.xlsx;*.csv)|*.xlsx;*.csv|All Files (*.*)|*.*",
+                Title = $"{targetEquipType} 대여 현황 파일 가져오기"
             };
-            if (dialog.ShowDialog() == true)
+            if (dialog.ShowDialog() != true) return;
+
+            try
             {
-                try
+                var table = ReadTable(dialog.FileName);
+
+                // 위쪽 10행 안에서 "학번"과 "성명"/"이름"이 함께 있는 행을 제목 행으로 본다.
+                int headerRow = -1;
+                for (int i = 0; i < Math.Min(table.Count, 10); i++)
                 {
-                    var rows = MiniExcelLibs.MiniExcel.Query(dialog.FileName).ToList();
-                    int importedCount = 0;
-                    foreach (IDictionary<string, object> row in rows)
+                    var texts = table[i].Select(x => x?.ToString() ?? "").ToList();
+                    bool hasId = texts.Any(t => t.Contains("학번"));
+                    bool hasName = texts.Any(t => t.Contains("성명") || t.Contains("이름"));
+                    if (hasId && hasName) { headerRow = i; break; }
+                }
+                if (headerRow < 0)
+                {
+                    MessageBox.Show(
+                        "학번·성명(이름) 열을 찾지 못했습니다. 대여 현황 양식의 엑셀/CSV 파일인지 확인해주세요.",
+                        "알림", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                var header = table[headerRow].Select(x => x?.ToString() ?? "").ToList();
+                int Find(params string[] keys)
+                {
+                    for (int i = 0; i < header.Count; i++)
+                        if (keys.Any(k => header[i].Contains(k))) return i;
+                    return -1;
+                }
+
+                int colId = Find("학번");
+                int colName = Find("성명", "이름");
+                int colDept = Find("전공", "학과", "소속");
+                int colLevel = Find("학년");
+                int colPhone = Find("연락처", "전화");
+                int colAdvisor = Find("지도교수");
+                int colEquip = Find("대여품목", "품목", "기자재");
+                int colUnitNo = Find("품목번호", "개체번호");
+                int colQty = Find("수량");
+                int colExtra = Find("추가 대여물품");
+                int colLoc = Find("사용장소");
+                int colPurpose = Find("사용목적");
+                int colRemarks = Find("특이사항");
+                int colRentalDate = Find("대여일", "대여날짜");
+                int colDueDate = Find("반납예정");
+                int colReturnDate = Find("반납일");
+                if (colReturnDate == colDueDate) colReturnDate = -1; // "반납예정일"이 먼저 걸린 경우 실제 반납일이 없다는 뜻
+
+                int importedCount = 0, skippedOtherEquip = 0;
+                for (int r = headerRow + 1; r < table.Count; r++)
+                {
+                    var row = table[r];
+                    string Cell(int i) => i >= 0 && i < row.Count ? (row[i]?.ToString()?.Trim() ?? string.Empty) : string.Empty;
+
+                    string id = NormalizeStudentId(colId >= 0 && colId < row.Count ? row[colId] : null);
+                    string studentName = Cell(colName);
+                    if (string.IsNullOrWhiteSpace(id) || !id.Any(char.IsDigit) || string.IsNullOrWhiteSpace(studentName))
+                        continue; // 학번이 없거나 숫자가 없으면 제목/안내 행
+
+                    // 현황표에 대여품목 열이 있으면(새 양식), 지금 가져오려는 기자재 종류(본체/노트북)와 다른 줄은 건너뛴다.
+                    string equipCell = Cell(colEquip);
+                    if (!string.IsNullOrWhiteSpace(equipCell))
                     {
-                        var values = row.Values.ToList();
-                        if (values.Count < 2) continue;
-
-                        string col0 = values[0]?.ToString() ?? "";
-                        if (col0 == "번호" || col0 == "No" || col0 == "No." || string.IsNullOrWhiteSpace(col0)) continue;
-
-                        // Skip rows with missing StudentId (Column 8 / Index 8) or StudentName (Column 11 / Index 11)
-                        string id = values.Count > 8 ? (values[8]?.ToString() ?? "") : "";
-                        string studentName = values.Count > 11 ? (values[11]?.ToString() ?? "") : "";
-                        if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(studentName)) continue;
-
-                        int.TryParse(values.Count > 1 ? (values[1]?.ToString() ?? "") : "", out int qty);
-                        string extra = values.Count > 2 ? (values[2]?.ToString() ?? "") : "";
-                        string loc = values.Count > 3 ? (values[3]?.ToString() ?? "") : "";
-                        string purp = values.Count > 4 ? (values[4]?.ToString() ?? "") : "";
-                        string rem = values.Count > 5 ? (values[5]?.ToString() ?? "") : "";
-                        string dept = values.Count > 6 ? (values[6]?.ToString() ?? "") : "";
-                        string level = values.Count > 7 ? (values[7]?.ToString() ?? "") : "";
-                        string phone = values.Count > 9 ? (values[9]?.ToString() ?? "") : "";
-                        string advisor = values.Count > 10 ? (values[10]?.ToString() ?? "") : "";
-
-                        DateTime rentalDate = _currentSimulatedDate;
-                        if (values.Count > 12 && DateTime.TryParse(values[12]?.ToString() ?? "", out var rd)) rentalDate = rd;
-
-                        int period = 7;
-                        if (values.Count > 13 && DateTime.TryParse(values[13]?.ToString() ?? "", out var dd))
-                        {
-                            period = (dd - rentalDate).Days;
-                            if (period <= 0) period = 7;
-                        }
-
-                        DateTime? retDate = null;
-                        if (values.Count > 14 && DateTime.TryParse(values[14]?.ToString() ?? "", out var retd)) retDate = retd;
-
-                        string equipType = targetEquipType;
-
-                        var rental = new RentalItem
-                        {
-                            Quantity = qty,
-                            ExtraItems = extra,
-                            Location = loc,
-                            Purpose = purp,
-                            Remarks = rem,
-                            Department = dept,
-                            YearLevel = level,
-                            StudentId = id,
-                            Phone = phone,
-                            Advisor = advisor,
-                            StudentName = studentName,
-                            RentalDate = rentalDate,
-                            RentalPeriodDays = period,
-                            ReturnDate = retDate,
-                            EquipmentType = equipType,
-                            IsReturned = retDate != null
-                        };
-
-                        _rentals.Add(rental);
-                        _rentalHistory.Add(rental);
-                        importedCount++;
+                        bool rowIsLaptop = equipCell.Contains("노트북");
+                        bool targetIsLaptop = targetEquipType.Contains("노트북");
+                        if (rowIsLaptop != targetIsLaptop) { skippedOtherEquip++; continue; }
                     }
 
-                    BindEquipmentRentals();
-                    UpdateAlertBadges();
-                    MessageBox.Show($"엑셀 파일로부터 {importedCount}건의 기자재 대여 내역을 추가했습니다.", "가져오기 성공", MessageBoxButton.OK, MessageBoxImage.Information);
+                    string dept = Cell(colDept);
+                    string level = Cell(colLevel);
+                    if (level.Length > 0 && level.All(char.IsDigit)) level += "학년"; // "4" -> "4학년"
+                    else if (level.EndsWith(".0")) level = level.Substring(0, level.Length - 2) + "학년";
+
+                    string phone = NormalizePhone(colPhone >= 0 && colPhone < row.Count ? row[colPhone] : null);
+                    string advisor = Cell(colAdvisor).Replace("교수님", "").Replace("교수", "").Trim();
+
+                    int.TryParse(Cell(colQty), out int qty);
+                    if (qty <= 0) qty = 1;
+                    string extra = Cell(colExtra);
+                    string loc = Cell(colLoc);
+                    if (string.IsNullOrWhiteSpace(loc)) loc = "DSU 창의공간";
+                    string purp = Cell(colPurpose);
+                    if (string.IsNullOrWhiteSpace(purp)) purp = "개인 실습";
+                    string rem = Cell(colRemarks);
+
+                    DateTime rentalDate = _currentSimulatedDate;
+                    if (DateTime.TryParse(Cell(colRentalDate), out var rd)) rentalDate = rd;
+
+                    int period = 7;
+                    if (DateTime.TryParse(Cell(colDueDate), out var dd))
+                    {
+                        period = (dd - rentalDate).Days;
+                        if (period <= 0) period = 7;
+                    }
+
+                    DateTime? retDate = null;
+                    if (colReturnDate >= 0 && DateTime.TryParse(Cell(colReturnDate), out var retd)) retDate = retd;
+
+                    // 품목번호가 있으면 "(No. n)"으로 기자재명에 붙여 개체 번호를 그대로 살린다.
+                    string equipType = targetEquipType;
+                    string unitNoText = Cell(colUnitNo);
+                    if (unitNoText.EndsWith(".0")) unitNoText = unitNoText.Substring(0, unitNoText.Length - 2);
+                    if (unitNoText.Length > 0 && unitNoText.All(char.IsDigit)) equipType = $"{targetEquipType} (No. {unitNoText})";
+
+                    var rental = new RentalItem
+                    {
+                        Quantity = qty,
+                        ExtraItems = extra,
+                        Location = loc,
+                        Purpose = purp,
+                        Remarks = rem,
+                        Department = dept,
+                        YearLevel = level,
+                        StudentId = id,
+                        Phone = phone,
+                        Advisor = advisor,
+                        StudentName = studentName,
+                        RentalDate = rentalDate,
+                        RentalPeriodDays = period,
+                        ReturnDate = retDate,
+                        EquipmentType = equipType,
+                        IsReturned = retDate != null
+                    };
+
+                    _rentals.Add(rental);
+                    _rentalHistory.Add(rental);
+                    importedCount++;
                 }
-                catch (Exception ex)
-                {
-                    MessageBox.Show($"엑셀 파일을 읽는 도중 오류가 발생했습니다: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
-                }
+
+                BindEquipmentRentals();
+                UpdateAlertBadges();
+                SaveAppState();
+
+                string skipMsg = skippedOtherEquip > 0
+                    ? $"\n(다른 기자재 종류 {skippedOtherEquip}건은 건너뛰었습니다.)"
+                    : "";
+                MessageBox.Show($"파일로부터 {importedCount}건의 기자재 대여 내역을 추가했습니다.{skipMsg}", "가져오기 성공", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"파일을 읽는 도중 오류가 발생했습니다: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -4038,19 +4111,193 @@ namespace SeatManagerApp
             ModalFaceAttendance.Visibility = Visibility.Collapsed;
         }
 
-        /// <summary>얼굴인식 프로그램이 써 둔 attendance.json을 읽어 최신순으로 보여준다.</summary>
+        // 모달을 열거나 새로고침할 때 읽어 둔 전체 기록 — 필터는 이 목록을 다시 거른다
+        private List<FaceAttendanceEntry> _faceAttendanceAll = new List<FaceAttendanceEntry>();
+
+        /// <summary>얼굴인식 프로그램이 써 둔 attendance.json을 읽어 필터를 적용해 최신순으로 보여준다.</summary>
         private void LoadFaceAttendanceGrid()
         {
-            var records = FaceIntegration.LoadAttendance()
+            _faceAttendanceAll = FaceIntegration.LoadAttendance();
+
+            TxtFaceAttendanceInfo.Text = _faceAttendanceAll.Count > 0
+                ? $"얼굴인식 프로그램(insightface-attendance)이 기록한 출근/퇴근 시간입니다. 전체 {_faceAttendanceAll.Count}건."
+                : "아직 기록된 출결 데이터가 없습니다. (파일 위치: " + FaceIntegration.AttendancePath + ")";
+            FillFaceCriteriaMonths();
+            if (_faceCriteriaMode) ApplyFaceCriteriaFilter();
+            else ApplyFaceAttendanceFilter();
+        }
+
+        // ---------- 월간 기준 확인 (주마다 20시간 이상 · 3회 이상) ----------
+        private bool _faceCriteriaMode;
+
+        private void BtnFaceViewRecords_Click(object sender, RoutedEventArgs e) => SetFaceCriteriaMode(false);
+
+        private void BtnFaceViewCriteria_Click(object sender, RoutedEventArgs e) => SetFaceCriteriaMode(true);
+
+        private void SetFaceCriteriaMode(bool criteria)
+        {
+            _faceCriteriaMode = criteria;
+            PanelFaceRecordFilter.Visibility = criteria ? Visibility.Collapsed : Visibility.Visible;
+            PanelFaceRecordGrid.Visibility = criteria ? Visibility.Collapsed : Visibility.Visible;
+            PanelFaceCriteriaFilter.Visibility = criteria ? Visibility.Visible : Visibility.Collapsed;
+            PanelFaceCriteriaGrid.Visibility = criteria ? Visibility.Visible : Visibility.Collapsed;
+            // 지금 보고 있는 쪽 버튼을 강조한다
+            BtnFaceViewRecords.FontWeight = criteria ? FontWeights.Normal : FontWeights.Bold;
+            BtnFaceViewCriteria.FontWeight = criteria ? FontWeights.Bold : FontWeights.Normal;
+            if (criteria) ApplyFaceCriteriaFilter();
+            else ApplyFaceAttendanceFilter();
+        }
+
+        /// <summary>월 목록 — 기록이 있는 달 + 이번 달, 최신순. 고르던 달은 그대로 둔다.</summary>
+        private void FillFaceCriteriaMonths()
+        {
+            string? current = CmbFaceCriteriaMonth.SelectedItem as string;
+            var months = _faceAttendanceAll
+                .Where(r => r.DateValue != null)
+                .Select(r => r.DateValue!.Value.ToString("yyyy-MM"))
+                .Append(DateTime.Today.ToString("yyyy-MM"))
+                .Distinct()
+                .OrderByDescending(m => m)
+                .ToList();
+            CmbFaceCriteriaMonth.ItemsSource = months;
+            CmbFaceCriteriaMonth.SelectedItem = current != null && months.Contains(current) ? current : months[0];
+        }
+
+        private void FaceCriteriaFilter_Changed(object sender, EventArgs e)
+        {
+            if (!IsLoaded || !_faceCriteriaMode) return;
+            ApplyFaceCriteriaFilter();
+        }
+
+        private void ApplyFaceCriteriaFilter()
+        {
+            if (CmbFaceCriteriaMonth.SelectedItem is not string monthText
+                || !DateTime.TryParseExact(monthText + "-01", "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None, out var month))
+                return;
+
+            var weeks = FaceIntegration.WeeksOfMonth(month.Year, month.Month);
+            var all = FaceIntegration.EvaluateMonth(_faceAttendanceAll, month.Year, month.Month);
+
+            string keyword = TxtFaceCriteriaSearch.Text.Trim();
+            CriteriaState? wanted = CmbFaceCriteriaResult.SelectedIndex switch
+            {
+                1 => CriteriaState.Passed,
+                2 => CriteriaState.Failed,
+                3 => CriteriaState.InProgress,
+                _ => null
+            };
+            var rows = all
+                .Where(r => keyword.Length == 0
+                            || r.StudentId.Contains(keyword, StringComparison.OrdinalIgnoreCase)
+                            || r.Name.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+                .Where(r => wanted == null || r.State == wanted)
+                .ToList();
+
+            // 주차 열은 달마다 수가 달라서(4~6주) 매번 다시 만든다
+            GridFaceCriteria.Columns.Clear();
+            GridFaceCriteria.Columns.Add(new DataGridTextColumn { Header = "학번", Binding = new System.Windows.Data.Binding("StudentId"), Width = 95 });
+            GridFaceCriteria.Columns.Add(new DataGridTextColumn { Header = "이름", Binding = new System.Windows.Data.Binding("Name"), Width = 75 });
+            for (int i = 0; i < weeks.Count; i++)
+            {
+                GridFaceCriteria.Columns.Add(new DataGridTextColumn
+                {
+                    Header = $"{i + 1}주차\n{weeks[i].Start:M/d}~{weeks[i].End:M/d}",
+                    Binding = new System.Windows.Data.Binding($"Weeks[{i}].Text"),
+                    Width = new DataGridLength(1, DataGridLengthUnitType.Star),
+                    MinWidth = 95
+                });
+            }
+            GridFaceCriteria.Columns.Add(new DataGridTextColumn { Header = "결과", Binding = new System.Windows.Data.Binding("ResultText"), Width = 130 });
+            GridFaceCriteria.ItemsSource = rows;
+
+            TxtFaceCriteriaRule.Text =
+                $"기준: 매주(월~일) {FaceIntegration.WeeklyRequiredHours:0}시간 이상 · {FaceIntegration.WeeklyRequiredDays}회 이상 출석 — 모든 주를 채워야 충족";
+            TxtFaceAttendanceSummary.Text =
+                $"{monthText} · {all.Count}명 중 ✅ 충족 {all.Count(r => r.State == CriteriaState.Passed)}명 · "
+                + $"❌ 미충족 {all.Count(r => r.State == CriteriaState.Failed)}명 · "
+                + $"⏳ 진행 중 {all.Count(r => r.State == CriteriaState.InProgress)}명"
+                + (rows.Count != all.Count ? $"  (표시 {rows.Count}명)" : "");
+        }
+
+        private void ApplyFaceAttendanceFilter()
+        {
+            string keyword = TxtFaceAttendanceSearch.Text.Trim();
+            DateTime? from = DpFaceAttendanceFrom.SelectedDate?.Date;
+            DateTime? to = DpFaceAttendanceTo.SelectedDate?.Date;
+
+            var records = _faceAttendanceAll
+                .Where(r => keyword.Length == 0
+                            || r.StudentId.Contains(keyword, StringComparison.OrdinalIgnoreCase)
+                            || r.Name.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+                .Where(r => from == null || (r.DateValue != null && r.DateValue >= from))
+                .Where(r => to == null || (r.DateValue != null && r.DateValue <= to))
                 .OrderByDescending(r => r.Date)
+                .ThenByDescending(r => r.CheckIn)
                 .ThenBy(r => r.Name)
                 .ToList();
 
             GridFaceAttendance.ItemsSource = records;
 
-            TxtFaceAttendanceInfo.Text = records.Count > 0
-                ? $"얼굴인식 프로그램(insightface-attendance)이 기록한 출근/퇴근 시간입니다. 총 {records.Count}건."
-                : "아직 기록된 출결 데이터가 없습니다. (파일 위치: " + FaceIntegration.AttendancePath + ")";
+            int people = records.Select(r => r.StudentId).Distinct().Count();
+            int days = records.Select(r => (r.StudentId, r.Date)).Distinct().Count();
+            int unfinished = records.Count(r => !string.IsNullOrEmpty(r.CheckIn) && string.IsNullOrEmpty(r.CheckOut));
+            TxtFaceAttendanceSummary.Text =
+                $"{records.Count}건 · {people}명 · 출석 {days}일(학생별 합) · 총 근무 {FaceIntegration.FormatDuration(records.Sum(r => r.WorkSeconds))}"
+                + (unfinished > 0 ? $" · 퇴근 기록 없음 {unfinished}건" : "");
+        }
+
+        private void FaceAttendanceFilter_Changed(object sender, EventArgs e)
+        {
+            // XAML을 읽는 도중(InitializeComponent)에도 불리므로 화면이 다 만들어진 뒤에만 거른다
+            if (!IsLoaded) return;
+            ApplyFaceAttendanceFilter();
+        }
+
+        private void BtnFaceAttendanceQuickRange_Click(object sender, RoutedEventArgs e)
+        {
+            DateTime today = DateTime.Today;
+            string tag = ((sender as FrameworkElement)?.Tag as string) ?? "all";
+            DateTime? from = tag switch
+            {
+                "today" => today,
+                "week" => today.AddDays(-(((int)today.DayOfWeek + 6) % 7)),  // 월요일부터
+                "month" => new DateTime(today.Year, today.Month, 1),
+                _ => null
+            };
+            DpFaceAttendanceFrom.SelectedDate = from;
+            DpFaceAttendanceTo.SelectedDate = from == null ? null : today;
+            ApplyFaceAttendanceFilter();
+        }
+
+        /// <summary>데이터 관리 탭 학생 상세 — 그 학생(학번)의 얼굴인식 출결 기록과 합계를 보여준다.</summary>
+        private void ShowMasterFaceAttendance(StudentInfo? student)
+        {
+            if (student == null || string.IsNullOrWhiteSpace(student.StudentId))
+            {
+                GridMasterFaceAttendance.ItemsSource = null;
+                TxtMasterFaceSummary.Text = "";
+                return;
+            }
+
+            var records = FaceIntegration.LoadAttendance()
+                .Where(r => r.StudentId == student.StudentId)
+                .OrderByDescending(r => r.Date)
+                .ThenByDescending(r => r.CheckIn)
+                .ToList();
+            GridMasterFaceAttendance.ItemsSource = records;
+
+            if (records.Count == 0)
+            {
+                TxtMasterFaceSummary.Text = "얼굴인식 출결 기록이 없습니다.";
+                return;
+            }
+            DateTime monthStart = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+            var thisMonth = records.Where(r => r.DateValue != null && r.DateValue >= monthStart).ToList();
+            TxtMasterFaceSummary.Text =
+                $"전체 출석 {records.Select(r => r.Date).Distinct().Count()}일 · 총 {FaceIntegration.FormatDuration(records.Sum(r => r.WorkSeconds))}\n"
+                + $"이번 달 {thisMonth.Select(r => r.Date).Distinct().Count()}일 · {FaceIntegration.FormatDuration(thisMonth.Sum(r => r.WorkSeconds))}"
+                + $"\n최근 출석 {records[0].Date}";
         }
 
         private void BtnImportDataManageExcel_Click(object sender, RoutedEventArgs e)

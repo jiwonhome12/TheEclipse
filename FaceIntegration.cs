@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace SeatManagerApp
 {
@@ -12,6 +14,10 @@ namespace SeatManagerApp
         public string StudentId { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
         public string Department { get; set; } = string.Empty;
+        // 아래는 얼굴인식 쪽 등록 화면에 같이 보여주는 항목 (연락처는 얼굴인식의 '전화번호' 칸으로 들어간다)
+        public string Phone { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string Advisor { get; set; } = string.Empty;
     }
 
     /// <summary>얼굴인식 출결 시스템이 기록한 하루치 출근/퇴근 한 건.</summary>
@@ -22,6 +28,32 @@ namespace SeatManagerApp
         public string Date { get; set; } = string.Empty;      // "yyyy-MM-dd"
         public string? CheckIn { get; set; }                  // "HH:mm:ss" — 없으면 null
         public string? CheckOut { get; set; }                 // "HH:mm:ss" — 없으면 null
+
+        /// <summary>
+        /// 출근~퇴근 인정 시간(초). 얼굴인식 프로그램의 계산 방식과 같다 —
+        /// 출근/퇴근 중 하나라도 없거나, 00:00~06:00 사이에 찍은 기록이면 0.
+        /// </summary>
+        [JsonIgnore]
+        public double WorkSeconds
+        {
+            get
+            {
+                if (!IsValidTime(CheckIn) || !IsValidTime(CheckOut)) return 0;
+                if (!TimeSpan.TryParse(CheckIn, out var tIn) || !TimeSpan.TryParse(CheckOut, out var tOut)) return 0;
+                return Math.Max(0, (tOut - tIn).TotalSeconds);
+            }
+        }
+
+        [JsonIgnore]
+        public string WorkTimeText => FaceIntegration.FormatDuration(WorkSeconds);
+
+        [JsonIgnore]
+        public DateTime? DateValue =>
+            DateTime.TryParseExact(Date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d)
+                ? d : null;
+
+        private static bool IsValidTime(string? time) =>
+            !string.IsNullOrEmpty(time) && string.CompareOrdinal(time, "06:00:00") >= 0;
     }
 
     /// <summary>
@@ -58,7 +90,10 @@ namespace SeatManagerApp
                     {
                         StudentId = s.StudentId,
                         Name = s.Name,
-                        Department = s.Department
+                        Department = s.Department,
+                        Phone = s.Contact,
+                        Email = s.Email,
+                        Advisor = s.Advisor
                     })
                     .OrderBy(s => s.StudentId)
                     .ToList();
@@ -88,5 +123,112 @@ namespace SeatManagerApp
                 return new List<FaceAttendanceEntry>();
             }
         }
+
+        /// <summary>초를 'N시간 NN분' 형태로 바꾼다.</summary>
+        public static string FormatDuration(double seconds)
+        {
+            var span = TimeSpan.FromSeconds(Math.Max(0, seconds));
+            return $"{(int)span.TotalHours}시간 {span.Minutes:00}분";
+        }
+
+        // 월간 출석 기준 — 그 달의 모든 주(월~일)마다 근무 20시간 이상 + 출석 3일 이상
+        public const double WeeklyRequiredHours = 20;
+        public const int WeeklyRequiredDays = 3;
+
+        /// <summary>
+        /// 그 달에 걸친 주(월요일 시작) 목록. 1일이 들어 있는 주부터 말일이 들어 있는 주까지이며,
+        /// 달 경계에 걸친 주는 앞뒤 달의 날짜까지 포함한 한 주 전체로 본다.
+        /// </summary>
+        public static List<(DateTime Start, DateTime End)> WeeksOfMonth(int year, int month)
+        {
+            var first = new DateTime(year, month, 1);
+            var last = first.AddMonths(1).AddDays(-1);
+            var weeks = new List<(DateTime, DateTime)>();
+            for (var start = first.AddDays(-(((int)first.DayOfWeek + 6) % 7)); start <= last; start = start.AddDays(7))
+                weeks.Add((start, start.AddDays(6)));
+            return weeks;
+        }
+
+        /// <summary>출결 기록에 나온 학생마다 그 달의 주별 근무시간·출석일과 기준 충족 여부를 계산한다.</summary>
+        public static List<MonthlyCriteriaRow> EvaluateMonth(IEnumerable<FaceAttendanceEntry> records, int year, int month)
+        {
+            var weeks = WeeksOfMonth(year, month);
+            DateTime today = DateTime.Today;
+            return records
+                .Where(r => !string.IsNullOrWhiteSpace(r.StudentId))
+                .GroupBy(r => r.StudentId)
+                .Select(g =>
+                {
+                    var row = new MonthlyCriteriaRow
+                    {
+                        StudentId = g.Key,
+                        Name = g.OrderByDescending(r => r.Date).First().Name
+                    };
+                    foreach (var (start, end) in weeks)
+                    {
+                        var inWeek = g.Where(r => r.DateValue != null && r.DateValue >= start && r.DateValue <= end).ToList();
+                        row.Weeks.Add(new WeeklyCriteriaResult
+                        {
+                            Start = start,
+                            End = end,
+                            Seconds = inWeek.Sum(r => r.WorkSeconds),
+                            // 출석 횟수는 출근을 찍은 날 수 (하루에 여러 번 출근해도 1회)
+                            Days = inWeek.Where(r => !string.IsNullOrEmpty(r.CheckIn)).Select(r => r.Date).Distinct().Count(),
+                            Finished = end < today
+                        });
+                    }
+                    return row;
+                })
+                .OrderBy(r => r.StudentId)
+                .ToList();
+        }
+    }
+
+    public enum CriteriaState { Passed, Failed, InProgress }
+
+    /// <summary>한 학생의 한 주 결과.</summary>
+    public class WeeklyCriteriaResult
+    {
+        public DateTime Start { get; set; }
+        public DateTime End { get; set; }
+        public double Seconds { get; set; }
+        public int Days { get; set; }
+        /// <summary>주가 이미 끝났는지 — 끝나지 않은 주는 아직 못 채웠어도 실패로 보지 않는다.</summary>
+        public bool Finished { get; set; }
+
+        public bool Met => Seconds >= FaceIntegration.WeeklyRequiredHours * 3600 && Days >= FaceIntegration.WeeklyRequiredDays;
+
+        public CriteriaState State => Met ? CriteriaState.Passed : Finished ? CriteriaState.Failed : CriteriaState.InProgress;
+
+        public string Text
+        {
+            get
+            {
+                string mark = State switch { CriteriaState.Passed => "✅", CriteriaState.Failed => "❌", _ => "⏳" };
+                return $"{mark} {Seconds / 3600:0.#}h · {Days}회";
+            }
+        }
+    }
+
+    /// <summary>한 학생의 한 달 결과 — 모든 주가 기준을 채워야 충족.</summary>
+    public class MonthlyCriteriaRow
+    {
+        public string StudentId { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public List<WeeklyCriteriaResult> Weeks { get; } = new List<WeeklyCriteriaResult>();
+
+        public CriteriaState State =>
+            Weeks.Any(w => w.State == CriteriaState.Failed) ? CriteriaState.Failed
+            : Weeks.All(w => w.State == CriteriaState.Passed) ? CriteriaState.Passed
+            : CriteriaState.InProgress;
+
+        public int PassedWeeks => Weeks.Count(w => w.Met);
+
+        public string ResultText => State switch
+        {
+            CriteriaState.Passed => "✅ 충족",
+            CriteriaState.Failed => $"❌ 미충족 ({PassedWeeks}/{Weeks.Count}주)",
+            _ => $"⏳ 진행 중 ({PassedWeeks}/{Weeks.Count}주)"
+        };
     }
 }
